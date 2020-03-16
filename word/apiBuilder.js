@@ -4071,7 +4071,7 @@
 		{
 			var oParagraph = editor.CreateParagraph();
 			oParagraph.AddText(oElement);
-			this.Document.Internal_Content_Add(this.Document.Content.length, oElement.private_GetImpl());
+			this.Document.Internal_Content_Add(this.Document.Content.length, oParagraph.private_GetImpl());
 		}
 		else 
 			return false;
