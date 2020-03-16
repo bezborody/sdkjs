@@ -4065,13 +4065,13 @@
 	{
 		if (oElement instanceof ApiParagraph || oElement instanceof ApiTable)
 		{
-			this.Document.Add_ToContent(this.Document.Content.length, oElement.Paragraph);
+			this.Document.Internal_Content_Add(this.Document.Content.length, oElement.private_GetImpl());
 		}
 		else if (typeof oElement === "string")
 		{
 			var oParagraph = editor.CreateParagraph();
 			oParagraph.AddText(oElement);
-			this.Document.Internal_Content_Add(this.Document.Content.length, oParagraph.private_GetImpl());
+			this.Document.Internal_Content_Add(this.Document.Content.length, oElement.private_GetImpl());
 		}
 		else 
 			return false;
