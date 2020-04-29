@@ -53,7 +53,6 @@
 	}
 	HeaderFooterField.prototype.getText = function (ws, indexPrintPage, countPrintPages) {
 		var res = "";
-		var curDate, curDateNum;
 		var api = window["Asc"]["editor"];
 		switch(this.field) {
 			case asc.c_oAscHeaderFooterField.pageNumber: {
@@ -77,15 +76,11 @@
 				break;
 			}
 			case asc.c_oAscHeaderFooterField.date: {
-				curDate = new Asc.cDate();
-				curDateNum = curDate.getExcelDate();
-				res = api.asc_getLocaleExample(AscCommon.getShortDateFormat(), curDateNum);
+				res = (new Asc.cDate()).getDateString(api);
 				break;
 			}
 			case asc.c_oAscHeaderFooterField.time: {
-				curDate = new Asc.cDate();
-				curDateNum = curDate.getExcelDateWithTime(true) - curDate.getTimezoneOffset()/(60*24);
-				res = api.asc_getLocaleExample(AscCommon.getShortTimeFormat(), curDateNum);
+				res = (new Asc.cDate()).getTimeString(api);
 				break;
 			}
 			case asc.c_oAscHeaderFooterField.lineBreak: {
@@ -1036,7 +1031,6 @@
 		}
 
 		wb.setCellEditMode(true);
-		ws.setCellEditMode(true);
 		options.cursorPos = cursorPos;
 		editor.open(options);
 		wb.input.disabled = false;

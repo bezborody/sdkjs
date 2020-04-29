@@ -103,6 +103,29 @@
 		return ret;
 	}
 
+	var uuid = [];
+	for (var i = 0; i < 256; i++)
+	{
+		uuid[i] = (i < 16 ? "0" : "") + (i).toString(16);
+	}
+	function CreateUUID(isNoDashes)
+	{
+		var d0 = Math.random() * 0xffffffff | 0;
+		var d1 = Math.random() * 0xffffffff | 0;
+		var d2 = Math.random() * 0xffffffff | 0;
+		var d3 = Math.random() * 0xffffffff | 0;
+
+		if (isNoDashes)
+			return uuid[d0 & 0xff] + uuid[d0 >> 8 & 0xff] + uuid[d0 >> 16 & 0xff] + uuid[d0 >> 24 & 0xff] +
+			uuid[d1 & 0xff] + uuid[d1 >> 8 & 0xff] + uuid[d1 >> 16 & 0x0f | 0x40] + uuid[d1 >> 24 & 0xff] +
+			uuid[d2 & 0x3f | 0x80] + uuid[d2 >> 8 & 0xff] + uuid[d2 >> 16 & 0xff] + uuid[d2 >> 24 & 0xff] +
+			uuid[d3 & 0xff] + uuid[d3 >> 8 & 0xff] + uuid[d3 >> 16 & 0xff] + uuid[d3 >> 24 & 0xff];
+		else
+			return uuid[d0 & 0xff] + uuid[d0 >> 8 & 0xff] + uuid[d0 >> 16 & 0xff] + uuid[d0 >> 24 & 0xff] + "-" +
+			uuid[d1 & 0xff] + uuid[d1 >> 8 & 0xff] + "-" + uuid[d1 >> 16 & 0x0f | 0x40] + uuid[d1 >> 24 & 0xff] + "-" +
+			uuid[d2 & 0x3f | 0x80] + uuid[d2 >> 8 & 0xff] + "-" + uuid[d2 >> 16 & 0xff] + uuid[d2 >> 24 & 0xff] +
+			uuid[d3 & 0xff] + uuid[d3 >> 8 & 0xff] + uuid[d3 >> 16 & 0xff] + uuid[d3 >> 24 & 0xff];
+	}
 	function CreateGUID()
 	{
 		function s4() { return Math.floor((1 + Math.random()) * 0x10000).toString(16).substring(1);	}
@@ -124,6 +147,13 @@
 	function CreateDurableId()
 	{
 		return FixDurableId(CreateUInt32());
+	}
+	function ExtendPrototype(dst, src)
+	{
+		for (var k in src.prototype)
+		{
+			dst.prototype[k] = src.prototype[k];
+		}
 	}
 
 	var c_oLicenseResult = {
@@ -4577,9 +4607,11 @@
 	window["AscCommon"].CreateAscColorCustom = CreateAscColorCustom;
 	window["AscCommon"].CreateAscColor = CreateAscColor;
 	window["AscCommon"].CreateGUID = CreateGUID;
+	window["AscCommon"].CreateUUID = CreateUUID;
 	window["AscCommon"].CreateUInt32 = CreateUInt32;
 	window["AscCommon"].CreateDurableId = CreateDurableId;
 	window["AscCommon"].FixDurableId = FixDurableId;
+	window["AscCommon"].ExtendPrototype = ExtendPrototype;
 
 	window['Asc']['c_oLicenseResult'] = window['Asc'].c_oLicenseResult = c_oLicenseResult;
 	prot = c_oLicenseResult;

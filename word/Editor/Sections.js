@@ -63,6 +63,9 @@ var section_footnote_PosDocEnd      = 0x01;
 var section_footnote_PosPageBottom  = 0x02;
 var section_footnote_PosSectEnd     = 0x03;
 
+var section_endnote_PosDocEnd  = 0x00;
+var section_endnote_PosSectEnd = 0x01;
+
 function CSectionPr(LogicDocument)
 {
     this.Id = AscCommon.g_oIdCounter.Get_NewId();
@@ -89,6 +92,7 @@ function CSectionPr(LogicDocument)
 
     this.Columns       = new CSectionColumns(this);
 	this.FootnotePr    = new CFootnotePr();
+	this.EndnotePr     = new CFootnotePr();
 
     // Добавляем данный класс в таблицу Id (обязательно в конце конструктора)
     g_oTableId.Add( this, this.Id );
@@ -778,6 +782,13 @@ CSectionPr.prototype =
     }
 };
 /**
+ * @returns {string}
+ */
+CSectionPr.prototype.GetId = function()
+{
+	return this.Id;
+};
+/**
  * Проверяем, есть ли хоть один колонтитул в данной секции
  * @returns {boolean}
  */
@@ -860,6 +871,77 @@ CSectionPr.prototype.GetFootnoteNumFormat = function()
 CSectionPr.prototype.private_GetDocumentWideFootnotePr = function()
 {
 	return this.LogicDocument.Footnotes.FootnotePr;
+};
+/**
+ * Возвращаем настройки концевых сносок
+ * @return {CFootnotePr}
+ */
+CSectionPr.prototype.GetEndnotePr = function()
+{
+	return this.EndnotePr;
+};
+CSectionPr.prototype.SetEndnotePos = function(nPos)
+{
+	// Pos, заданная в секции не должна использоваться
+	if (nPos !== this.EndnotePr.Pos)
+	{
+		History.Add(new CChangesSectionEndnotePos(this, this.EndnotePr.Pos, nPos));
+		this.EndnotePr.Pos = nPos;
+	}
+};
+CSectionPr.prototype.GetEndnotePos = function()
+{
+	// Pos, заданная в секции не должна использоваться
+	return this.EndnotePr.Pos;
+};
+CSectionPr.prototype.SetEndnoteNumStart = function(nStart)
+{
+	if (this.EndnotePr.NumStart !== nStart)
+	{
+		History.Add(new CChangesSectionEndnoteNumStart(this, this.EndnotePr.NumStart, nStart));
+		this.EndnotePr.NumStart = nStart;
+	}
+};
+CSectionPr.prototype.GetEndnoteNumStart = function()
+{
+	if (undefined === this.EndnotePr.NumStart)
+		return 1;
+
+	return this.EndnotePr.NumStart;
+};
+CSectionPr.prototype.SetEndnoteNumRestart = function(nRestartType)
+{
+	if (this.EndnotePr.NumRestart !== nRestartType)
+	{
+		History.Add(new CChangesSectionEndnoteNumRestart(this, this.EndnotePr.NumRestart, nRestartType));
+		this.EndnotePr.NumRestart = nRestartType;
+	}
+};
+CSectionPr.prototype.GetEndnoteNumRestart = function()
+{
+	if (undefined === this.EndnotePr.NumRestart)
+		return section_footnote_RestartContinuous;
+
+	return this.EndnotePr.NumRestart;
+};
+CSectionPr.prototype.SetEndnoteNumFormat = function(nFormatType)
+{
+	if (this.EndnotePr.NumFormat !== nFormatType)
+	{
+		History.Add(new CChangesSectionEndnoteNumFormat(this, this.EndnotePr.NumFormat, nFormatType));
+		this.EndnotePr.NumFormat = nFormatType;
+	}
+};
+CSectionPr.prototype.GetEndnoteNumFormat = function()
+{
+	if (undefined === this.EndnotePr.NumFormat)
+		return Asc.c_oAscNumberingFormat.LowerRoman;
+
+	return this.EndnotePr.NumFormat;
+};
+CSectionPr.prototype.private_GetDocumentWideEndnotePr = function()
+{
+	return this.LogicDocument.Endnotes.EndnotePr;
 };
 CSectionPr.prototype.SetColumnProps = function(oColumnsProps)
 {
@@ -1544,6 +1626,13 @@ CFootnotePr.prototype.InitDefault = function()
 	this.NumRestart = section_footnote_RestartContinuous;
 	this.NumStart   = 1;
 	this.Pos        = section_footnote_PosPageBottom;
+};
+CFootnotePr.prototype.InitDefaultEndnotePr = function()
+{
+	this.NumFormat  = Asc.c_oAscNumberingFormat.LowerRoman;
+	this.NumRestart = section_footnote_RestartContinuous;
+	this.NumStart   = 1;
+	this.Pos        = section_endnote_PosDocEnd;
 };
 CFootnotePr.prototype.WriteToBinary = function(Writer)
 {

@@ -3510,7 +3510,6 @@ function OfflineEditor () {
         };
         
         AscCommonExcel.WorksheetView.prototype.__changeSelectionPoint = function (x, y, isCoord, isSelectMode, isReverse) {
-            
             var isChangeSelectionShape = false;
             if (isCoord) {
                 isChangeSelectionShape = this._endSelectionShape();
@@ -3559,7 +3558,7 @@ function OfflineEditor () {
                     selection.activeCell.row = newRange.r1;
                 }
                 
-                if (!this.isCellEditMode) {
+                if (!this.handlers.trigger('getCellEditMode')) {
                     if (!this.isSelectionDialogMode) {
                         this.handlers.trigger("selectionNameChanged", this.getSelectionName(/*bRangeText*/true));
                         if (!isSelectMode) {
@@ -5276,7 +5275,6 @@ window["native"]["offline_cell_editor_open"] = function(x, y, width, height, rat
         var selectionRange = ws.model.selectionRange.clone();
         
         t.setCellEditMode(true);
-        ws.setCellEditMode(true);
         ws.openCellEditor(t.cellEditor, /*cursorPos*/undefined, isFocus, isClearCell,
                           /*isHideCursor*/isHideCursor, /*isQuickInput*/isQuickInput, selectionRange);
         //t.input.disabled = false;
@@ -6593,7 +6591,7 @@ window["native"]["offline_apply_event"] = function(type,params) {
         {
             if (undefined !== params) {
                 var indexScheme = parseInt(params);
-                _api.asc_ChangeColorScheme(indexScheme);
+                _api.asc_ChangeColorSchemeByIdx(indexScheme);
             }
             break;
         }
@@ -6986,7 +6984,8 @@ window["native"]["offline_apply_event"] = function(type,params) {
             {
                 var json = JSON.parse(params[0]),
                     commentId = json["id"],
-                    comment = json["comment"];
+                    comment = json["comment"],
+                    updateAuthor = json["updateAuthor"] || false;
 
                 if (json && commentId) {
                     var timeZoneOffsetInMs = (new Date()).getTimezoneOffset() * 60000;
@@ -7016,8 +7015,8 @@ window["native"]["offline_apply_event"] = function(type,params) {
                         ascComment.asc_putQuoteText(comment["quoteText"]);
                         ascComment.asc_putTime(utcDateToString(sTime));
                         ascComment.asc_putOnlyOfficeTime(ooDateToString(sTime));
-                        ascComment.asc_putUserId(comment["userId"]);
-                        ascComment.asc_putUserName(comment["userName"]);
+                        ascComment.asc_putUserId(updateAuthor ? currentUserId : comment["userId"]);
+                        ascComment.asc_putUserName(updateAuthor ? currentUserName : comment["userName"]);
                         ascComment.asc_putSolved(comment["solved"]);
                         ascComment.asc_putGuid(comment["id"]);
 

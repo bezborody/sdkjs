@@ -4532,6 +4532,59 @@ var editor;
 	spreadsheet_api.prototype.asc_validSheetName = function (val) {
 		return window["AscCommon"].rx_test_ws_name.isValidName(val);
 	};
+    spreadsheet_api.prototype.asc_getRemoveDuplicates = function (bExpand) {
+      var ws = this.wb && this.wb.getWorksheet();
+      if(ws) {
+        return ws.getRemoveDuplicates(bExpand);
+      }
+    };
+    spreadsheet_api.prototype.asc_setRemoveDuplicates = function (props, bCancel) {
+      var ws = this.wb && this.wb.getWorksheet();
+      if(ws) {
+        return ws.setRemoveDuplicates(props, bCancel);
+      }
+    };
+
+    spreadsheet_api.prototype.asc_getCF = function (type, id) {
+      var rules = null;
+      var range, sheet;
+      switch (type) {
+        case Asc.c_oAscSelectionForCFType.selection:
+          sheet = this.wbModel.getActiveWs();
+          // ToDo multiselect
+          range = sheet.selectionRange.getLast();
+          break;
+        case Asc.c_oAscSelectionForCFType.worksheet:
+          sheet = this.wbModel.getWorksheet(id);
+          break;
+        case Asc.c_oAscSelectionForCFType.table:
+          // ToDo
+          break;
+        case Asc.c_oAscSelectionForCFType.pivot:
+          // ToDo
+          break;
+      }
+      if (sheet) {
+        var aRules = sheet.aConditionalFormattingRules.sort(function(v1, v2) {
+          return v1.priority - v2.priority;
+        });
+        if (range) {
+          rules = [];
+          var oRule, ranges, multiplyRange;
+          for (var i = 0; i < aRules.length; ++i) {
+            oRule = aRules[i];
+            ranges = oRule.ranges;
+            multiplyRange = new AscCommonExcel.MultiplyRange(ranges);
+            if (multiplyRange.isIntersect(range)) {
+              rules.push(oRule);
+            }
+          }
+        } else {
+          rules = aRules;
+        }
+      }
+      return rules;
+    };
 
 
   /*
@@ -4593,6 +4646,7 @@ var editor;
   prot["asc_setPageOption"] = prot.asc_setPageOption;
   prot["asc_changePageOrient"] = prot.asc_changePageOrient;
   prot["asc_changePrintTitles"] = prot.asc_changePrintTitles;
+  prot["asc_getPrintTitlesRange"] = prot.asc_getPrintTitlesRange;
 
   prot["asc_ChangePrintArea"] = prot.asc_ChangePrintArea;
   prot["asc_CanAddPrintArea"] = prot.asc_CanAddPrintArea;
@@ -4936,5 +4990,10 @@ var editor;
   prot["asc_setSortProps"] = prot.asc_setSortProps;
 
   prot["asc_validSheetName"] = prot.asc_validSheetName;
+
+  prot["asc_getRemoveDuplicates"] = prot.asc_getRemoveDuplicates;
+  prot["asc_setRemoveDuplicates"] = prot.asc_setRemoveDuplicates;
+
+  prot["asc_getCF"] = prot.asc_getCF;
 
 })(window);

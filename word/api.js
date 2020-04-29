@@ -8019,14 +8019,17 @@ background-repeat: no-repeat;\
 		}
 	};
 
-	asc_docs_api.prototype.asc_AddMath2 = function(Type)
+	asc_docs_api.prototype.asc_AddMath2 = function(nType)
 	{
-		if (false === this.WordControl.m_oLogicDocument.Document_Is_SelectionLocked(changestype_Paragraph_Content))
+		var oLogicDocument = this.private_GetLogicDocument();
+		if (!oLogicDocument)
+			return;
+
+		if (!oLogicDocument.IsSelectionLocked(AscCommon.changestype_Paragraph_Content))
 		{
-			this.WordControl.m_oLogicDocument.StartAction(AscDFH.historydescription_Document_AddMath);
-			var MathElement = new AscCommonWord.MathMenu(Type);
-			this.WordControl.m_oLogicDocument.AddToParagraph(MathElement);
-			this.WordControl.m_oLogicDocument.FinalizeAction();
+			oLogicDocument.StartAction(AscDFH.historydescription_Document_AddMath);
+			oLogicDocument.AddParaMath(nType);
+			oLogicDocument.FinalizeAction();
 		}
 	};
 	asc_docs_api.prototype.asc_AddPageCount = function()
@@ -8700,7 +8703,8 @@ background-repeat: no-repeat;\
 		if (!oLogicDocument)
 			return false;
 
-		return (!!oLogicDocument.GetContentControl());
+		var oCC = oLogicDocument.GetContentControl();
+		return (oCC && !oCC.IsContentControlEquation());
 	};
 	asc_docs_api.prototype.asc_GetContentControlProperties = function()
 	{
@@ -8710,7 +8714,7 @@ background-repeat: no-repeat;\
 
 		var oContentControl = oLogicDocument.GetContentControl();
 
-		return oContentControl ? oContentControl.GetContentControlPr() : null;
+		return oContentControl && !oContentControl.IsContentControlEquation() ? oContentControl.GetContentControlPr() : null;
 	};
 	asc_docs_api.prototype.asc_GetCurrentContentControl = function()
 	{
@@ -8719,7 +8723,7 @@ background-repeat: no-repeat;\
 			return null;
 
 		var oContentControl = oLogicDocument.GetContentControl();
-		return oContentControl ? oContentControl.GetId() : null;
+		return oContentControl && !oContentControl.IsContentControlEquation() ? oContentControl.GetId() : null;
 	};
 	asc_docs_api.prototype.sync_ContentControlCallback = function(oContentControlPr)
 	{
@@ -9089,6 +9093,18 @@ background-repeat: no-repeat;\
 			return;
 
 		this.asc_SetContentControlDatePickerPr(oPr, sId);
+	};
+	asc_docs_api.prototype.asc_SetContentControlTextPlaceholder = function(sText, sId)
+	{
+		var oLogicDocument = this.private_GetLogicDocument();
+		if (!oLogicDocument)
+			return;
+
+		var oContentControl = oLogicDocument.GetContentControl(sId);
+		if (!oContentControl)
+			return;
+
+		oLogicDocument.SetContentControlTextPlaceholder(sText, oContentControl);
 	};
 
 	asc_docs_api.prototype.asc_UncheckContentControlButtons = function()
@@ -10805,6 +10821,7 @@ background-repeat: no-repeat;\
 	asc_docs_api.prototype['asc_SelectContentControlListItem']          = asc_docs_api.prototype.asc_SelectContentControlListItem;
 	asc_docs_api.prototype['asc_SetContentControlDatePickerPr']         = asc_docs_api.prototype.asc_SetContentControlDatePickerPr;
 	asc_docs_api.prototype['asc_SetContentControlDatePickerDate']       = asc_docs_api.prototype.asc_SetContentControlDatePickerDate;
+	asc_docs_api.prototype['asc_SetContentControlTextPlaceholder']      = asc_docs_api.prototype.asc_SetContentControlTextPlaceholder;
 
 	asc_docs_api.prototype['asc_BeginViewModeInReview']                 = asc_docs_api.prototype.asc_BeginViewModeInReview;
 	asc_docs_api.prototype['asc_EndViewModeInReview']                   = asc_docs_api.prototype.asc_EndViewModeInReview;

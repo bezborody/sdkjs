@@ -7010,14 +7010,12 @@
                 this.aHyperlinks = [];
                 var oNewWorksheet = new AscCommonExcel.Worksheet(this.wb, wb.aWorksheets.length);
                 oNewWorksheet.aFormulaExt = [];
-				
+                var DrawingDocument = oNewWorksheet.getDrawingDocument();
 				//TODO при copy/paste в word из excel необходимо подменить DrawingDocument из word - пересмотреть правку!
-				if(typeof editor != "undefined" && editor && editor.WordControl && editor.WordControl.m_oLogicDocument && editor.WordControl.m_oLogicDocument.DrawingDocument)
-					oNewWorksheet.DrawingDocument = editor.WordControl.m_oLogicDocument.DrawingDocument;
-				else if(this.copyPasteObj && this.copyPasteObj.isCopyPaste)
-				{
-					oNewWorksheet.DrawingDocument = window["Asc"]["editor"].wbModel.getActiveWs().DrawingDocument;
-				}
+				if(typeof editor != "undefined" && editor && editor.WordControl && editor.WordControl.m_oLogicDocument && editor.WordControl.m_oLogicDocument.DrawingDocument) {
+                    this.wb.DrawingDocument = editor.WordControl.m_oLogicDocument.DrawingDocument;
+                }
+
 				
                 this.curWorksheet = oNewWorksheet;
                 res = this.bcr.Read1(length, function(t,l){
@@ -7037,6 +7035,7 @@
                 }
                 this.wb.aWorksheets.push(oNewWorksheet);
                 this.wb.aWorksheetsById[oNewWorksheet.getId()] = oNewWorksheet;
+                this.wb.DrawingDocument = DrawingDocument;
             }
             else
                 res = c_oSerConstants.ReadUnknown;
@@ -7970,7 +7969,7 @@
         };
         this.ReadPptxDrawing = function () {
             var graphicObject;
-            var oGraphicObject = pptx_content_loader.ReadGraphicObject(this.stream, this.curWorksheet);
+            var oGraphicObject = pptx_content_loader.ReadGraphicObject(this.stream, this.curWorksheet, this.curWorksheet.getDrawingDocument());
             if(null != oGraphicObject
                 && !((oGraphicObject.getObjectType() === AscDFH.historyitem_type_Shape || oGraphicObject.getObjectType() === AscDFH.historyitem_type_ImageShape) && !oGraphicObject.spPr)
                 && !AscCommon.IsHiddenObj(oGraphicObject))
@@ -9432,13 +9431,13 @@
                 if(c_oSerConstants.ReadOk == res)
                     res = new BinaryPersonReader(this.stream, personList).Read();
             }
+			var bwtr = new Binary_WorksheetTableReader(this.stream, this.oReadResult, wb, aSharedStrings, aCellXfs, aDxfs, oMediaArray, personList, this.copyPasteObj);
 			if(null != nWorkbookTableOffset)
 			{
 				res = this.stream.Seek(nWorkbookTableOffset);
 				if(c_oSerConstants.ReadOk == res)
 					res = (new Binary_WorkbookTableReader(this.stream, this.oReadResult, wb, bwtr)).Read();
 			}
-			var bwtr = new Binary_WorksheetTableReader(this.stream, this.oReadResult, wb, aSharedStrings, aCellXfs, aDxfs, oMediaArray, personList, this.copyPasteObj);
             if(c_oSerConstants.ReadOk == res)
             {
                 for(var i = 0; i < aSeekTable.length; ++i)
@@ -10105,6 +10104,7 @@
 		return newContext;
 	};
 
+    var prot;
     window['Asc'] = window['Asc'] || {};
     window['AscCommonExcel'] = window['AscCommonExcel'] || {};
     window["Asc"].EBorderStyle = EBorderStyle;
@@ -10124,12 +10124,78 @@
     window["Asc"].EIconSetType = EIconSetType;
     window["Asc"].c_oSer_DrawingType = c_oSer_DrawingType;
     window["Asc"].c_oSer_DrawingPosType = c_oSer_DrawingPosType;
-    window["AscCommonExcel"].ECfOperator = ECfOperator;
-	window["AscCommonExcel"].ECfType = ECfType;
-    window["AscCommonExcel"].ECfvoType = ECfvoType;
-    window["AscCommonExcel"].ST_TimePeriod = ST_TimePeriod;
-	window["AscCommonExcel"].EDataBarAxisPosition = EDataBarAxisPosition;
-	window["AscCommonExcel"].EDataBarDirection = EDataBarDirection;
+
+    window['Asc']['c_oAscCFOperator'] = window["AscCommonExcel"].ECfOperator = ECfOperator;
+    prot = ECfOperator;
+    prot['beginsWith'] = prot.Operator_beginsWith;
+    prot['between'] = prot.Operator_between;
+    prot['containsText'] = prot.Operator_containsText;
+    prot['endsWith'] = prot.Operator_endsWith;
+    prot['equal'] = prot.Operator_equal;
+    prot['greaterThan'] = prot.Operator_greaterThan;
+    prot['greaterThanOrEqual'] = prot.Operator_greaterThanOrEqual;
+    prot['lessThan'] = prot.Operator_lessThan;
+    prot['lessThanOrEqual'] = prot.Operator_lessThanOrEqual;
+    prot['notBetween'] = prot.Operator_notBetween;
+    prot['notContains'] = prot.Operator_notContains;
+    prot['notEqual'] = prot.Operator_notEqual;
+
+    window['Asc']['c_oAscCFType'] = window["Asc"].ECfType  = ECfType;
+    prot = ECfType;
+    prot['aboveAverage'] = prot.aboveAverage;
+    prot['beginsWith'] = prot.beginsWith;
+    prot['cellIs'] = prot.cellIs;
+    prot['colorScale'] = prot.colorScale;
+    prot['containsBlanks'] = prot.containsBlanks;
+    prot['containsErrors'] = prot.containsErrors;
+    prot['containsText'] = prot.containsText;
+    prot['dataBar'] = prot.dataBar;
+    prot['duplicateValues'] = prot.duplicateValues;
+    prot['expression'] = prot.expression;
+    prot['notContainsBlanks'] = prot.notContainsBlanks;
+    prot['notContainsErrors'] = prot.notContainsErrors;
+    prot['notContainsText'] = prot.notContainsText;
+    prot['timePeriod'] = prot.timePeriod;
+    prot['top10'] = prot.top10;
+    prot['uniqueValues'] = prot.uniqueValues;
+    prot['endsWith'] = prot.endsWith;
+
+    window['Asc']['c_oAscCfvoType'] = window["AscCommonExcel"].ECfvoType = ECfvoType;
+    prot = ECfvoType;
+    prot['Formula'] = prot.Formula;
+    prot['Maximum'] = prot.Maximum;
+    prot['Minimum'] = prot.Minimum;
+    prot['Number'] = prot.Number;
+    prot['Percent'] = prot.Percent;
+    prot['Percentile'] = prot.Percentile;
+    prot['AutoMin'] = prot.AutoMin;
+    prot['AutoMax'] = prot.AutoMax;
+
+    window['Asc']['c_oAscTimePeriod'] = window["AscCommonExcel"].ST_TimePeriod = ST_TimePeriod;
+    prot = ST_TimePeriod;
+    prot['last7Days'] = prot.last7Days;
+    prot['lastMonth'] = prot.lastMonth;
+    prot['lastWeek'] = prot.lastWeek;
+    prot['nextMonth'] = prot.nextMonth;
+    prot['nextWeek'] = prot.nextWeek;
+    prot['thisMonth'] = prot.thisMonth;
+    prot['thisWeek'] = prot.thisWeek;
+    prot['today'] = prot.today;
+    prot['tomorrow'] = prot.tomorrow;
+    prot['yesterday'] = prot.yesterday;
+
+    window['Asc']['c_oAscDataBarAxisPosition'] = window['AscCommonExcel'].EDataBarAxisPosition = EDataBarAxisPosition;
+    prot = EDataBarAxisPosition;
+    prot['automatic'] = prot.automatic;
+    prot['middle'] = prot.middle;
+    prot['none'] = prot.none;
+
+    window['Asc']['c_oAscDataBarDirection'] = window["AscCommonExcel"].EDataBarDirection = EDataBarDirection;
+    prot = EDataBarDirection;
+    prot['context'] = prot.context;
+    prot['leftToRight'] = prot.leftToRight;
+    prot['rightToLeft'] = prot.rightToLeft;
+
 	window["AscCommonExcel"].XLSB = XLSB;
 
     window["Asc"].CTableStyles = CTableStyles;

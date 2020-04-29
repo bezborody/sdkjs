@@ -162,7 +162,7 @@ CGraphicObjects.prototype =
         }
         return _arrFields;
     },
-    
+
     TurnOffCheckChartSelection: function()
     {
         this.bNoCheckChartTextSelection = true;
@@ -469,7 +469,7 @@ CGraphicObjects.prototype =
         }, this, []);
 
     },
-	
+
     recalculate_: function(data)
     {
         if(data.All)
@@ -1143,15 +1143,18 @@ CGraphicObjects.prototype =
             var  ret = [];
             for(var i = 0; i < arrObjects.length; ++i)
             {
-                if(arrObjects[i].GetType() === type_Paragraph)
+                if(arrObjects[i].IsParagraph())
                 {
                     var calc_frame = arrObjects[i].CalculatedFrame;
-                    var FramePr = arrObjects[i].Get_FramePr();
-                    var FrameDx = ( undefined === FramePr.HSpace ? 0 : FramePr.HSpace );
-                    var FrameDy = ( undefined === FramePr.VSpace ? 0 : FramePr.VSpace );
-                    ret.push(new CFlowParagraph(arrObjects[i], calc_frame.L2, calc_frame.T2, calc_frame.W2, calc_frame.H2, FrameDx, FrameDy, 0, 0, FramePr.Wrap));
+                    if(calc_frame.StartIndex === arrObjects[i].Index)
+                    {
+                        var FramePr = arrObjects[i].Get_FramePr();
+                        var FrameDx = ( undefined === FramePr.HSpace ? 0 : FramePr.HSpace );
+                        var FrameDy = ( undefined === FramePr.VSpace ? 0 : FramePr.VSpace );
+                        ret.push(new CFlowParagraph(arrObjects[i], calc_frame.L2, calc_frame.T2, calc_frame.W2, calc_frame.H2, FrameDx, FrameDy, arrObjects[i].GetIndex(), calc_frame.FlowCount, FramePr.Wrap));
+                    }
                 }
-                else if(arrObjects[i].GetType() === type_Table)
+                else if(arrObjects[i].IsTable())
                 {
                 	if (0 === arrObjects[i].GetStartPageRelative())
                     	ret.push(new CFlowTable(arrObjects[i], 0));
@@ -1440,7 +1443,7 @@ CGraphicObjects.prototype =
     handleOleObjectDoubleClick: function(drawing, oleObject, e, x, y, pageIndex)
     {
 		if(drawing && drawing.ParaMath){
-			editor.sync_OnConvertEquationToMath(this);
+			editor.sync_OnConvertEquationToMath(drawing);
 		}
         else if(false === this.document.Document_Is_SelectionLocked(changestype_Drawing_Props) || !this.document.CanEdit())
         {
@@ -1481,7 +1484,7 @@ CGraphicObjects.prototype =
 
     handleMathDrawingDoubleClick : function(drawing, e, x, y, pageIndex)
     {
-		editor.sync_OnConvertEquationToMath(this);
+		editor.sync_OnConvertEquationToMath(drawing);
         this.changeCurrentState(new AscFormat.NullState(this));
         this.document.OnMouseUp(e, x, y, pageIndex);
     },
@@ -2489,6 +2492,7 @@ CGraphicObjects.prototype =
                 this.document.Recalculate();
                 var oContent = oShape.getDocContent();
                 oContent.Set_CurrentElement(0, true);
+                oContent.MoveCursorToStartPos(false);
                 this.updateSelectionState();
                 this.document.FinalizeAction();
             }
@@ -2924,7 +2928,7 @@ CGraphicObjects.prototype =
             return oTargetDocContent.RecalculateCurPos(bUpdateX, bUpdateY);
 
         if (!window["NATIVE_EDITOR_ENJINE"]) {
-            
+
             var oParaDrawing = this.getMajorParaDrawing();
             if (oParaDrawing)
             {
@@ -3858,7 +3862,7 @@ CGraphicObjects.prototype =
     {
         if(this.canChangeWrapPolygon())
         {
-            var bNeedBehindDoc = this.getCompatibilityMode() < document_compatibility_mode_Word15;
+            var bNeedBehindDoc = this.getCompatibilityMode() < AscCommon.document_compatibility_mode_Word15;
             if(this.selectedObjects[0].parent.wrappingType !== WRAPPING_TYPE_THROUGH
                 || this.selectedObjects[0].parent.wrappingType !== WRAPPING_TYPE_TIGHT
             || this.selectedObjects[0].parent.behindDoc !== bNeedBehindDoc)

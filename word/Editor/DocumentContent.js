@@ -175,6 +175,10 @@ CDocumentContent.prototype.Copy = function(Parent, DrawingDocument, oPr)
 };
 CDocumentContent.prototype.Copy2 = function(OtherDC, oPr)
 {
+	if(this === OtherDC)
+	{
+		return;
+	}
 	// Копируем содержимое
 	this.Internal_Content_RemoveAll();
 
@@ -1068,7 +1072,7 @@ CDocumentContent.prototype.Recalculate_Page               = function(PageIndex, 
                 var FrameBounds = this.Content[Index].Get_FrameBounds(FrameX, FrameY, FrameW, FrameH);
                 var FrameX2     = FrameBounds.X, FrameY2 = FrameBounds.Y, FrameW2 = FrameBounds.W, FrameH2 = FrameBounds.H;
 
-                if ((FrameY2 + FrameH2 > Page_Field_B || Y > Page_Field_B - 0.001 ) && Index != StartIndex)
+                if ((FrameY2 + FrameH2 > Page_H || Y > Page_H - 0.001 ) && Index != StartIndex)
                 {
                     this.RecalcInfo.Set_FrameRecalc(true);
                     this.Content[Index].StartFromNewPage();
@@ -1081,7 +1085,7 @@ CDocumentContent.prototype.Recalculate_Page               = function(PageIndex, 
                     {
                         var TempElement = this.Content[TempIndex];
                         TempElement.Shift(TempElement.Pages.length - 1, FrameX, FrameY);
-                        TempElement.Set_CalculatedFrame(FrameX, FrameY, FrameW, FrameH, FrameX2, FrameY2, FrameW2, FrameH2, PageIndex);
+                        TempElement.Set_CalculatedFrame(FrameX, FrameY, FrameW, FrameH, FrameX2, FrameY2, FrameW2, FrameH2, PageIndex, Index, FlowCount);
                     }
 
                     var FrameDx = ( undefined === FramePr.HSpace ? 0 : FramePr.HSpace );
@@ -1488,6 +1492,10 @@ CDocumentContent.prototype.Get_PageBounds = function(CurPage, Height, bForceChec
 	}
 
 	return Bounds;
+};
+CDocumentContent.prototype.GetPageBounds = function(nCurPage, nHeight, isForceCheckDrawings)
+{
+	return this.Get_PageBounds(nCurPage, nHeight, isForceCheckDrawings);
 };
 CDocumentContent.prototype.GetContentBounds = function(CurPage)
 {
@@ -2887,6 +2895,8 @@ CDocumentContent.prototype.AddToParagraph = function(ParaItem, bRecalculate)
 				case para_Separator:
 				case para_ContinuationSeparator:
 				case para_InstrText:
+				case para_EndnoteReference:
+				case para_EndnoteRef:
 				{
 					if (ParaItem instanceof AscCommonWord.MathMenu)
 					{
@@ -2894,7 +2904,8 @@ CDocumentContent.prototype.AddToParagraph = function(ParaItem, bRecalculate)
 						if (oInfo.Get_Math())
 						{
 							var oMath = oInfo.Get_Math();
-							ParaItem.SetText(oMath.Copy(true));
+							if (!oMath.IsParentEquationPlaceholder())
+								ParaItem.SetText(oMath.Copy(true));
 						}
 						else if (!oInfo.Is_MixedSelection())
 						{
@@ -6433,16 +6444,9 @@ CDocumentContent.prototype.Selection_SetEnd = function(X, Y, CurPage, MouseEvent
 						if (this.LogicDocument && this.LogicDocument.MoveCursorToStartOfDocument)
 							this.LogicDocument.MoveCursorToStartOfDocument();
 					}
-					else if (sBookmarkName)
-					{
-						var oBookmarksManagers = this.LogicDocument && this.LogicDocument.GetBookmarksManager ? this.LogicDocument.GetBookmarksManager() : null;
-						var oBookmark          = oBookmarksManagers ? oBookmarksManagers.GetBookmarkByName(sBookmarkName) : null;
-						if (oBookmark)
-							oBookmark[0].GoToBookmark();
-					}
 					else if (sValue)
 					{
-						editor && editor.sync_HyperlinkClickCallback(sValue);
+						editor && editor.sync_HyperlinkClickCallback(sBookmarkName ? sValue + "#" + sBookmarkName : sValue);
 						this.Selection.Data.Hyperlink.SetVisited(true);
 						if (this.DrawingDocument.m_oLogicDocument)
 						{
@@ -6457,6 +6461,13 @@ CDocumentContent.prototype.Selection_SetEnd = function(X, Y, CurPage, MouseEvent
 							}
 							this.DrawingDocument.OnEndRecalculate(false, true);
 						}
+					}
+					else if (sBookmarkName)
+					{
+						var oBookmarksManagers = this.LogicDocument && this.LogicDocument.GetBookmarksManager ? this.LogicDocument.GetBookmarksManager() : null;
+						var oBookmark          = oBookmarksManagers ? oBookmarksManagers.GetBookmarkByName(sBookmarkName) : null;
+						if (oBookmark)
+							oBookmark[0].GoToBookmark();
 					}
 				}
 				else if (null !== this.Selection.Data && this.Selection.Data.PageRef)
@@ -7005,10 +7016,27 @@ CDocumentContent.prototype.Internal_GetContentPosByXY = function(X, Y, PageNum)
 
     PageNum = Math.max(0, Math.min(PageNum, this.Pages.length - 1));
 
-    // Сначала проверим Flow-таблицы
-    var FlowTable = this.LogicDocument && this.LogicDocument.DrawingObjects.getTableByXY(X, Y, PageNum + this.Get_StartPage_Absolute(), this);
-    if (null != FlowTable)
-        return FlowTable.Table.Index;
+    var oFlowTable = this.LogicDocument && this.LogicDocument.DrawingObjects.getTableByXY(X, Y, PageNum + this.Get_StartPage_Absolute(), this);
+    if (oFlowTable)
+	{
+		if (flowobject_Table === oFlowTable.Get_Type())
+		{
+			return oFlowTable.Table.Index;
+		}
+		else
+		{
+			var nStartPos  = oFlowTable.StartIndex;
+			var nFlowCount = oFlowTable.FlowCount;
+			for (var nPos = nStartPos; nPos < nStartPos + nFlowCount; ++nPos)
+			{
+				var oBounds = this.Content[nPos].GetPageBounds(0);
+				if (Y < oBounds.Bottom)
+					return nPos;
+			}
+
+			return nStartPos + nFlowCount - 1;
+		}
+	}
 
     // Теперь проверим пустые параграфы с окончанием секций (в нашем случае это пустой параграф послей таблицы внутри таблицы)
     var SectCount = this.Pages[PageNum].EndSectionParas.length;
@@ -7646,7 +7674,7 @@ CDocumentContent.prototype.Read_FromBinary2 = function(Reader)
 				var worksheet = api.wbModel.getWorksheetById(id);
 				if (worksheet)
 				{
-					this.DrawingDocument = worksheet.DrawingDocument;
+					this.DrawingDocument = worksheet.getDrawingDocument();
 				}
 			}
 		}
@@ -8342,6 +8370,10 @@ CDocumentContent.prototype.Set_LogicDocument = function(oLogicDocument)
     this.DrawingObjects  = oLogicDocument.DrawingObjects;
 };
 CDocumentContent.prototype.Get_LogicDocument = function()
+{
+	return this.LogicDocument;
+};
+CDocumentContent.prototype.GetLogicDocument = function()
 {
 	return this.LogicDocument;
 };

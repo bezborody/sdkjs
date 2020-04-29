@@ -2040,6 +2040,15 @@ CTableCell.prototype.GetBorder = function(nType)
 	return this.Get_Border(nType);
 };
 /**
+ * Выставляем заданную границу
+ * @poram {CDocumentBorder} oBorder
+ * @param {number} nType - 0 - Top, 1 - Right, 2- Bottom, 3- Left
+ */
+CTableCell.prototype.SetBorder = function(oBorder, nType)
+{
+	return this.Set_Border(oBorder, nType);
+};
+/**
  * Проверяем, является ли данная ячейка последней в строке
  * @returns {boolean}
  */
@@ -2066,6 +2075,88 @@ CTableCell.prototype.IsLastTableCellInRow = function(isSelection)
 	}
 
 	return true;
+};
+/**
+ * Проверяем пустая ли заданная граница, если надо удаляем ее
+ * @param {number} nType - 0 - Top, 1 - Right, 2- Bottom, 3- Left
+ */
+CTableCell.prototype.CheckEmptyBorder = function(nType)
+{
+	var oBorderNone = new CDocumentBorder();
+
+	if (nType === 0)
+	{
+		if (border_None !== this.GetBorder(nType).Value)
+			this.SetBorder(oBorderNone, nType);
+	}
+	else if (nType === 1 || nType === 3)
+	{
+		// Удаляем границы для всех ячеейк, учавствующих в вертикальном объединении
+		var oTable        = this.GetTable();
+		var oRow          = this.GetRow();
+		var nVMergeCount  = oTable.GetVMergeCount(this.GetIndex(), oRow.GetIndex());
+		var nCurGridStart = oRow.GetCellInfo(this.Index).StartGridCol;
+
+		if (this.Get_Border(nType).Value != 0)
+			this.Set_Border(oBorderNone, nType);
+
+		if (nVMergeCount > 1)
+		{
+			for (var nIndex = oRow.GetIndex() + 1; nIndex < oRow.GetIndex() + nVMergeCount; ++nIndex)
+			{
+				var oCellInVertUnion = oTable.GetCellByStartGridCol(nIndex, nCurGridStart);
+				if (oCellInVertUnion && border_None !== oCellInVertUnion.GetBorder(nType).Value)
+					oCellInVertUnion.SetBorder(oBorderNone, nType);
+			}
+		}
+	}
+	else if (nType === 2)
+	{
+		var oTable        = this.GetTable();
+		var oRow          = this.GetRow();
+		var nCurGridStart = oRow.GetCellInfo(this.Index).StartGridCol;
+
+		var nVMergeCount         = oTable.GetVMergeCount(this.GetIndex(), this.GetRow().GetIndex());
+		var oLastCellInVertUnion = oTable.GetCellByStartGridCol(oRow.GetIndex() + nVMergeCount - 1, nCurGridStart);
+
+		if (oLastCellInVertUnion && border_None !== oLastCellInVertUnion.GetBorder(nType).Value)
+			oLastCellInVertUnion.SetBorder(oBorderNone, nType);
+	}
+};
+/**
+ * Проверяем заданную границу, и если надо делаем ее не пустой
+ * @param {number} nType - 0 - Top, 1 - Right, 2- Bottom, 3- Left
+ */
+CTableCell.prototype.CheckNonEmptyBorder = function(nType)
+{
+	var oBorder   = new CDocumentBorder();
+	oBorder.Value = border_Single;
+
+	if (nType === 0 || nType === 2)
+	{
+		if (border_None === this.GetBorder(nType).Value)
+			this.SetBorder(oBorder, nType);
+	}
+	else if (nType === 1 || nType === 3)
+	{
+		var oTable        = this.GetTable();
+		var oRow          = this.GetRow();
+		var nVMergeCount  = oTable.GetVMergeCount(this.GetIndex(), oRow.GetIndex());
+		var nCurGridStart = oRow.GetCellInfo(this.Index).StartGridCol;
+
+		if (this.Get_Border(nType).Value === 0)
+			this.Set_Border(border, nType);
+
+		if (nVMergeCount > 1)
+		{
+			for (var nIndex = oRow.GetIndex() + 1; nIndex < oRow.GetIndex() + nVMergeCount; ++nIndex)
+			{
+				var oCellInVertUnion = oTable.GetCellByStartGridCol(nIndex, nCurGridStart);
+				if (oCellInVertUnion && border_None === oCellInVertUnion.GetBorder(nType).Value)
+					oCellInVertUnion.SetBorder(oBorder, nType);
+			}
+		}
+	}
 };
 /**
  * Получаем скомпилированную настройку ширины ячейки

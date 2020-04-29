@@ -1276,7 +1276,7 @@ DrawingObjectsController.prototype =
                     this.sendCropState();
                     if(this.drawingObjects && this.drawingObjects.showDrawingObjects)
                     {
-                        this.drawingObjects.showDrawingObjects();
+                        this.drawingObjects.showDrawingObjects(true);
                     }
                     this.updateOverlay();
                 }
@@ -1332,7 +1332,7 @@ DrawingObjectsController.prototype =
                 this.sendCropState();
                 if(this.drawingObjects && this.drawingObjects.showDrawingObjects)
                 {
-                    this.drawingObjects.showDrawingObjects();
+                    this.drawingObjects.showDrawingObjects(true);
                 }
                 this.updateOverlay();
             }
@@ -1367,7 +1367,7 @@ DrawingObjectsController.prototype =
 
                 if(this.drawingObjects && this.drawingObjects.showDrawingObjects)
                 {
-                    this.drawingObjects.showDrawingObjects();
+                    this.drawingObjects.showDrawingObjects(true);
                 }
                 this.updateOverlay();
             }
@@ -1599,6 +1599,7 @@ DrawingObjectsController.prototype =
                 this.recalculate();
                 var oContent = oShape.getDocContent();
                 oContent.Set_CurrentElement(0, true);
+                oContent.MoveCursorToStartPos(false);
                 this.updateSelectionState();
             }
         },[], false);
@@ -6968,7 +6969,19 @@ DrawingObjectsController.prototype =
                     }
                     else
                     {
-                        this.checkSelectedObjectsAndCallback(this.addNewParagraph, [], false, AscDFH.historydescription_Spreadsheet_AddNewParagraph, undefined, window["Asc"]["editor"].collaborativeEditing.getFast());
+                        if(e.shiftKey)
+                        {
+                            var oThis = this;
+                            var callBack = function()
+                            {
+                                oThis.paragraphAdd(new ParaNewLine(AscCommonWord.break_Line));
+                            };
+                            this.checkSelectedObjectsAndCallback(callBack, [], false, AscDFH.historydescription_Spreadsheet_AddItem, undefined, window["Asc"]["editor"].collaborativeEditing.getFast())
+                        }
+                        else
+                        {
+                            this.checkSelectedObjectsAndCallback(this.addNewParagraph, [], false, AscDFH.historydescription_Spreadsheet_AddNewParagraph, undefined, window["Asc"]["editor"].collaborativeEditing.getFast());
+                        }
                         this.recalculate();
                     }
 

@@ -739,6 +739,9 @@ parserHelp.setDigitSeparator(AscCommon.g_oDefaultCultureInfo.NumberDecimalSepara
 	cString.prototype.tocString = function () {
 		return this;
 	};
+	cString.prototype.getValue = function () {
+		return this.value.replace(/\"\"/g, "\"");
+	};
 
 	/**
 	 * @constructor
@@ -1572,6 +1575,9 @@ parserHelp.setDigitSeparator(AscCommon.g_oDefaultCultureInfo.NumberDecimalSepara
 	};
 	cArea3D.prototype.isSingleSheet = function () {
 		return this.wsFrom === this.wsTo;
+	};
+	cArea3D.prototype.isBetweenSheet = function (ws) {
+		return ws && this.wsFrom.getIndex() <= ws.getIndex() && ws.getIndex() <= this.wsTo.getIndex();
 	};
 
 	/**
@@ -2725,6 +2731,7 @@ parserHelp.setDigitSeparator(AscCommon.g_oDefaultCultureInfo.NumberDecimalSepara
 	cBaseFunction.prototype.returnValueType = null;
 	cBaseFunction.prototype.inheritFormat = null;
 	cBaseFunction.prototype.name = null;
+	cBaseFunction.prototype.argumentsType = null;
 	cBaseFunction.prototype.Calculate = function () {
 		return new cError(cErrorType.wrong_name);
 	};
@@ -3176,10 +3183,12 @@ parserHelp.setDigitSeparator(AscCommon.g_oDefaultCultureInfo.NumberDecimalSepara
 
 		if((true === this.bArrayFormula || bIsSpecialFunction) && (!returnFormulaType || replaceAreaByValue || replaceAreaByRefs || arrayIndexes || replaceOnlyArray)) {
 			//вначале перебираем все аргументы и преобразовываем из cellsRange в массив или значение в зависимости от того, как должна работать функция
-			var tempArgs = [], tempArg, firstArray;
+			var tempArgs = [], tempArg, firstArray, _checkArrayIndex;
 			for (var j = 0; j < argumentsCount; j++) {
 				tempArg = arg[j];
-				if (!checkArrayIndex(j)) {
+
+				_checkArrayIndex = checkArrayIndex(j);
+				if (!_checkArrayIndex) {
 					if (cElementType.cellsRange === tempArg.type || cElementType.cellsRange3D === tempArg.type) {
 						if (replaceAreaByValue) {
 							tempArg = tempArg.cross(opt_bbox);
@@ -3190,14 +3199,21 @@ parserHelp.setDigitSeparator(AscCommon.g_oDefaultCultureInfo.NumberDecimalSepara
 							//к примеру, area A1:B2 разбиваем на [a1,a1;a2,a2] вместо нормального [a1,b1;a2,b2]
 							var useOnlyFirstRow = "column" === this.name.toLowerCase() ? parserFormula.ref : null;
 							var useOnlyFirstColumn = "row" === this.name.toLowerCase() ? parserFormula.ref : null;
-							tempArg = window['AscCommonExcel'].convertAreaToArrayRefs(tempArg, useOnlyFirstRow, useOnlyFirstColumn);
+							var _bbox = tempArg.range.bbox;
+							if (useOnlyFirstRow) {
+								firstArray = new Asc.Range(_bbox.c1, _bbox.r1, _bbox.c2, _bbox.r1);
+							} else if (useOnlyFirstColumn) {
+								firstArray = new Asc.Range(_bbox.c1, _bbox.r1, _bbox.c1, _bbox.r2);
+							} else {
+								tempArg = window['AscCommonExcel'].convertAreaToArrayRefs(tempArg, useOnlyFirstRow, useOnlyFirstColumn);
+							}
 						} else if(!replaceOnlyArray){
 							tempArg = window['AscCommonExcel'].convertAreaToArray(tempArg);
 						}
 					}
 				}
 
-				if (cElementType.array === tempArg.type && !checkArrayIndex(j)) {
+				if (cElementType.array === tempArg.type && !_checkArrayIndex) {
 					//пытаемся найти массив, которые имеет более 1 столбца и более 1 строки
 					if (!firstArray) {
 						firstArray = tempArg;
@@ -3254,7 +3270,8 @@ parserHelp.setDigitSeparator(AscCommon.g_oDefaultCultureInfo.NumberDecimalSepara
 
 			if (firstArray) {
 				var array = new cArray();
-				firstArray.foreach(function (elem, r, c) {
+				//bbox_elem -
+				var doCalc = function (elem, r, c, _row, _col) {
 					if (!array.array[r]) {
 						array.addRow();
 					}
@@ -3297,8 +3314,23 @@ parserHelp.setDigitSeparator(AscCommon.g_oDefaultCultureInfo.NumberDecimalSepara
 					if (0 === argumentsCount && parserFormula.ref) {
 						temp_opt_bbox = new Asc.Range(c + parserFormula.ref.c1, r + parserFormula.ref.r1, c + parserFormula.ref.c1, r + parserFormula.ref.r1);
 					}
-					array.addElement(t.Calculate(newArgs, temp_opt_bbox, opt_defName, parserFormula.ws/*, bIsSpecialFunction*/));
-				});
+					array.addElement(t.Calculate(newArgs, temp_opt_bbox, opt_defName, parserFormula.ws, null, _row, _col));
+				};
+
+				if (firstArray.foreach) {
+					firstArray.foreach(doCalc);
+				} else {
+					//сделал заглушку для рассчета row()/col() функций. если по общей схему данные функции на вход
+					//принимают только ref. перед тем как рассчитать формулу массива необходимо было сформировать
+					//набор этих ref. поскольку этим функциям необходимы только номер строки/столбца -
+					//передаём в функцию дополнительные параметры с этими данными
+					for (var i = firstArray.r1; i <= firstArray.r2; i++) {
+						for (var n = firstArray.c1; n <= firstArray.c2; n++) {
+							doCalc(null, i - firstArray.r1, n - firstArray.c1, i, n);
+						}
+					}
+				}
+
 
 				res = array;
 
@@ -6081,7 +6113,8 @@ function parserFormula( formula, parent, _ws ) {
 						found_operand = new cRef3D(ph.real_str ? ph.real_str.toUpperCase() : ph.operand_str.toUpperCase(), wsF);
 					}
 					parseResult.addRefPos(prevCurrPos, ph.pCurrPos, t.outStack.length, found_operand);
-				} else if (parserHelp.isName.call(ph, t.Formula, ph.pCurrPos)) {
+				} else {
+					parserHelp.isName.call(ph, t.Formula, ph.pCurrPos);
 					found_operand = new cName3D(ph.operand_str, wsF);
 					parseResult.addRefPos(prevCurrPos, ph.pCurrPos, t.outStack.length, found_operand);
 				}
@@ -6113,7 +6146,7 @@ function parserFormula( formula, parent, _ws ) {
 				}
 			}
 
-			/* Referens to DefinedNames */ else if (parserHelp.isName.call(ph, t.Formula, ph.pCurrPos)[0]) {
+			/* Referens to DefinedNames */ else if (parserHelp.isName.call(ph, t.Formula, ph.pCurrPos)) {
 
 				if (ph.operand_str.length > g_nFormulaStringMaxLength && !ignoreErrors) {
 					//TODO стоит добавить новую ошибку
@@ -6436,14 +6469,20 @@ function parserFormula( formula, parent, _ws ) {
 	};
 
 	/* Для обратной сборки функции иногда необходимо поменять ссылки на ячейки */
-	parserFormula.prototype.changeOffset = function (offset, canResize, nChangeTable) {//offset = AscCommon.CellBase
+	parserFormula.prototype.changeOffset = function (offset, canResize, nChangeTable, notOffset3d) {//offset = AscCommon.CellBase
 		var t = this;
 		//временно комментирую из-за проблемы: при сборке формулы после обработки данной функцией в режиме R1c1
 		///мы получаем вид A1. необходимо пересмотреть все функции toString/toLocaleString где возвращается value
 		//+ парсинг на endTransaction запускается в режиме r1c1
 		//AscCommonExcel.executeInR1C1Mode(false, function () {
 			for (var i = 0; i < t.outStack.length; i++) {
-				t._changeOffsetElem(t.outStack[i], t.outStack, i, offset, canResize, nChangeTable);
+				var doOffset = true;
+				if (notOffset3d && t.outStack[i] && (t.outStack[i].type === cElementType.cell3D || t.outStack[i].type === cElementType.cellsRange3D)) {
+					doOffset = false;
+				}
+				if (doOffset) {
+					t._changeOffsetElem(t.outStack[i], t.outStack, i, offset, canResize, nChangeTable);
+				}
 			}
 		//});
 		return this;
@@ -7238,19 +7277,19 @@ function parserFormula( formula, parent, _ws ) {
 		}
 		return false;
 	};
-	parserFormula.prototype.simplifyRefType = function(val, opt_cell) {
+	parserFormula.prototype.simplifyRefType = function(val, opt_ws, opt_row, opt_col) {
 		var ref = this.getArrayFormulaRef(), row, col;
 
 		if (cElementType.cell === val.type || cElementType.cell3D === val.type) {
 			val = val.getValue();
-			if (cElementType.empty === val.type && opt_cell) {
+			if (cElementType.empty === val.type && opt_ws) {
 				// Bug http://bugzilla.onlyoffice.com/show_bug.cgi?id=33941
 				val = new cNumber(0);
 			}
 		} else if (cElementType.array === val.type) {
-			if(ref && opt_cell) {
-				row = 1 === val.array.length ? 0 : opt_cell.nRow - ref.r1;
-				col = 1 === val.array[0].length ? 0 : opt_cell.nCol - ref.c1;
+			if(ref && opt_ws) {
+				row = 1 === val.array.length ? 0 : opt_row - ref.r1;
+				col = 1 === val.array[0].length ? 0 : opt_col - ref.c1;
 				if(val.array[row] && val.array[row][col]) {
 					val = val.getElementRowCol(row, col);
 				} else {
@@ -7263,10 +7302,10 @@ function parserFormula( formula, parent, _ws ) {
 			//сделано для формул массива
 			//внутри массива может лежать ссылка на диапазон(например, функция index возвращает area/ref)
 			if(cElementType.cellsRange === val.type || cElementType.cellsRange3D === val.type || cElementType.array === val.type || cElementType.cell === val.type || cElementType.cell3D === val.type) {
-				val = this.simplifyRefType(val, opt_cell);
+				val = this.simplifyRefType(val, opt_ws, opt_row, opt_col);
 			}
 		} else if (cElementType.cellsRange === val.type || cElementType.cellsRange3D === val.type) {
-			if (opt_cell) {
+			if (opt_ws) {
 				var range;
 				if(ref) {
 					range = val.getRange();
@@ -7274,8 +7313,8 @@ function parserFormula( formula, parent, _ws ) {
 						var bbox = range.bbox;
 						var rowCount = bbox.r2 - bbox.r1 + 1;
 						var colCount = bbox.c2 - bbox.c1 + 1;
-						row = 1 === rowCount ? 0 : opt_cell.nRow - ref.r1;
-						col = 1 === colCount ? 0 : opt_cell.nCol - ref.c1;
+						row = 1 === rowCount ? 0 : opt_row - ref.r1;
+						col = 1 === colCount ? 0 : opt_col - ref.c1;
 						val = val.getValueByRowCol(row, col);
 						if(!val) {
 							val = new window['AscCommonExcel'].cError(window['AscCommonExcel'].cErrorType.not_available);
@@ -7284,8 +7323,8 @@ function parserFormula( formula, parent, _ws ) {
 						val = new window['AscCommonExcel'].cError(window['AscCommonExcel'].cErrorType.not_available);
 					}
 				} else {
-					range = new Asc.Range(opt_cell.nCol, opt_cell.nRow, opt_cell.nCol, opt_cell.nRow);
-					val = val.cross(range, opt_cell.ws.getId());
+					range = new Asc.Range(opt_col, opt_row, opt_col, opt_row);
+					val = val.cross(range, opt_ws.getId());
 				}
 			} else if (cElementType.cellsRange === val.type) {
 				val = val.getValue2(0, 0);
@@ -7834,7 +7873,6 @@ function parserFormula( formula, parent, _ws ) {
 
 		if(range) {
 			var bbox = range.bbox;
-
 
 			var countRow = useOnlyFirstRow ? 0 : bbox.r2 - bbox.r1;
 			var countCol = useOnlyFirstColumn ? 0 : bbox.c2 - bbox.c1;

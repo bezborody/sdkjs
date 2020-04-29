@@ -227,7 +227,10 @@
 			UplDocumentFileCount    : -753,
 
 			CustomSortMoreOneSelectedError: -800,
-			CustomSortNotOriginalSelectError: -801
+			CustomSortNotOriginalSelectError: -801,
+
+			// Data Validate
+			RemoveDuplicates : -850
 		}
 	};
 
@@ -267,11 +270,11 @@
 	};
 
 	var c_oAscRestrictionType = {
-		None           : 0,
-		OnlyForms      : 1,
-		OnlyComments   : 2,
-		OnlySignatures : 3,
-		View           : 0xFF // Отличие данного ограничения от обычного ViewMode в том, что редактор открывается
+		None           : 0x00,
+		OnlyForms      : 0x01,
+		OnlyComments   : 0x02,
+		OnlySignatures : 0x04,
+		View           : 0x80 // Отличие данного ограничения от обычного ViewMode в том, что редактор открывается
 		                      // как полноценный редактор, просто мы запрещаем ЛЮБОЕ редактирование. А во ViewMode
 		                      // открывается именно просмотрщик.
 	};
@@ -2008,6 +2011,13 @@
 		g_oLcidIdToNameMap[id] = name;
 	}
 
+	var document_compatibility_mode_Word11 = 11;
+	var document_compatibility_mode_Word12 = 12;
+	var document_compatibility_mode_Word14 = 14;
+	var document_compatibility_mode_Word15 = 15;
+
+	var document_compatibility_mode_Current = document_compatibility_mode_Word12;
+
 	//------------------------------------------------------------export--------------------------------------------------
 	var prot;
 	window['Asc']                          = window['Asc'] || {};
@@ -2159,6 +2169,7 @@
 	prot['UplDocumentFileCount']             = prot.UplDocumentFileCount;
 	prot['CustomSortMoreOneSelectedError']   = prot.CustomSortMoreOneSelectedError;
 	prot['CustomSortNotOriginalSelectError'] = prot.CustomSortNotOriginalSelectError;
+	prot['RemoveDuplicates']                 = prot.RemoveDuplicates;
 	window['Asc']['c_oAscAsyncAction']       = window['Asc'].c_oAscAsyncAction = c_oAscAsyncAction;
 	prot                                     = c_oAscAsyncAction;
 	prot['Open']                             = prot.Open;
@@ -2951,5 +2962,11 @@
 	prot['DropDownList'] = c_oAscContentControlSpecificType.DropDownList;
 	prot['DateTime']     = c_oAscContentControlSpecificType.DateTime;
 	prot['TOC']          = c_oAscContentControlSpecificType.TOC;
+
+	window["AscCommon"].document_compatibility_mode_Word11  = document_compatibility_mode_Word11;
+	window["AscCommon"].document_compatibility_mode_Word12  = document_compatibility_mode_Word12;
+	window["AscCommon"].document_compatibility_mode_Word14  = document_compatibility_mode_Word14;
+	window["AscCommon"].document_compatibility_mode_Word15  = document_compatibility_mode_Word15;
+	window["AscCommon"].document_compatibility_mode_Current = document_compatibility_mode_Current;
 
 })(window);

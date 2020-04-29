@@ -456,6 +456,21 @@ var c_oAscPopUpSelectorType = {
       current: 2
   };
 
+  var c_oAscFormulaArgumentType = {
+    number: 0,
+    text: 1,
+    reference: 2,
+    any: 3,
+    logical: 4
+  };
+
+  var c_oAscSelectionForCFType = {
+    selection: 1,
+    worksheet: 2,
+    table: 3,
+    pivot: 4
+  };
+
   var c_kMaxPrintPages = 1500;
 
   //----------------------------------------------------------export----------------------------------------------------
@@ -721,5 +736,20 @@ var c_oAscPopUpSelectorType = {
   prot['first'] = prot.first;
   prot['frozen'] = prot.frozen;
   prot['current'] = prot.current;
+
+  window['Asc']['c_oAscFormulaArgumentType'] = window['Asc'].c_oAscFormulaArgumentType = c_oAscFormulaArgumentType;
+  prot = c_oAscPrintTitlesRangeType;
+  prot['number'] = prot.number;
+  prot['text'] = prot.text;
+  prot['reference'] = prot.reference;
+  prot['any'] = prot.any;
+  prot['logical'] = prot.logical;
+
+  window['Asc']['c_oAscSelectionForCFType'] = window['Asc'].c_oAscSelectionForCFType = c_oAscSelectionForCFType;
+  prot = c_oAscSelectionForCFType;
+  prot['selection'] = prot.selection;
+  prot['worksheet'] = prot.worksheet;
+  prot['table'] = prot.table;
+  prot['pivot'] = prot.pivot;
 
 })(window);

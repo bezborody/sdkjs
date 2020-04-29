@@ -52,6 +52,11 @@ AscDFH.changesFactory[AscDFH.historyitem_SdtPr_ComboBox]         = CChangesSdtPr
 AscDFH.changesFactory[AscDFH.historyitem_SdtPr_DropDownList]     = CChangesSdtPrDropDownList;
 AscDFH.changesFactory[AscDFH.historyitem_SdtPr_DatePicker]       = CChangesSdtPrDatePicker;
 AscDFH.changesFactory[AscDFH.historyitem_SdtPr_TextPr]           = CChangesSdtPrTextPr;
+AscDFH.changesFactory[AscDFH.historyitem_SdtPr_Placeholder]      = CChangesSdtPrPlaceholder;
+AscDFH.changesFactory[AscDFH.historyitem_SdtPr_ShowingPlcHdr]    = CChangesSdtPrShowingPlcHdr;
+AscDFH.changesFactory[AscDFH.historyitem_SdtPr_Equation]         = CChangesSdtPrEquation;
+AscDFH.changesFactory[AscDFH.historyitem_SdtPr_Text]             = CChangesSdtPrText;
+AscDFH.changesFactory[AscDFH.historyitem_SdtPr_Temporary]        = CChangesSdtPrTemporary;
 
 //----------------------------------------------------------------------------------------------------------------------
 // Карта зависимости изменений
@@ -102,6 +107,21 @@ AscDFH.changesRelationMap[AscDFH.historyitem_SdtPr_DatePicker] = [
 ];
 AscDFH.changesRelationMap[AscDFH.historyitem_SdtPr_TextPr] = [
 	AscDFH.historyitem_SdtPr_TextPr
+];
+AscDFH.changesRelationMap[AscDFH.historyitem_SdtPr_Placeholder] = [
+	AscDFH.historyitem_SdtPr_Placeholder
+];
+AscDFH.changesRelationMap[AscDFH.historyitem_SdtPr_ShowingPlcHdr] = [
+	AscDFH.historyitem_SdtPr_ShowingPlcHdr
+];
+AscDFH.changesRelationMap[AscDFH.historyitem_SdtPr_Equation] = [
+	AscDFH.historyitem_SdtPr_Equation
+];
+AscDFH.changesRelationMap[AscDFH.historyitem_SdtPr_Text] = [
+	AscDFH.historyitem_SdtPr_Text
+];
+AscDFH.changesRelationMap[AscDFH.historyitem_SdtPr_Temporary] = [
+	AscDFH.historyitem_SdtPr_Temporary
 ];
 //----------------------------------------------------------------------------------------------------------------------
 
@@ -525,4 +545,80 @@ CChangesSdtPrTextPr.prototype.private_SetValue = function(Value)
 CChangesSdtPrTextPr.prototype.private_CreateObject = function()
 {
 	return new CTextPr();
+};
+/**
+ * @constructor
+ * @extends {AscDFH.CChangesBaseStringProperty}
+ */
+function CChangesSdtPrPlaceholder(Class, Old, New)
+{
+	AscDFH.CChangesBaseStringProperty.call(this, Class, Old, New);
+}
+CChangesSdtPrPlaceholder.prototype = Object.create(AscDFH.CChangesBaseStringProperty.prototype);
+CChangesSdtPrPlaceholder.prototype.constructor = CChangesSdtPrPlaceholder;
+CChangesSdtPrPlaceholder.prototype.Type = AscDFH.historyitem_SdtPr_Placeholder;
+CChangesSdtPrPlaceholder.prototype.private_SetValue = function(Value)
+{
+	this.Class.Pr.Placeholder = Value;
+};
+
+/**
+ * @constructor
+ * @extends {AscDFH.CChangesBaseBoolProperty}
+ */
+function CChangesSdtPrShowingPlcHdr(Class, Old, New)
+{
+	AscDFH.CChangesBaseBoolProperty.call(this, Class, Old, New);
+}
+CChangesSdtPrShowingPlcHdr.prototype = Object.create(AscDFH.CChangesBaseBoolProperty.prototype);
+CChangesSdtPrShowingPlcHdr.prototype.constructor = CChangesSdtPrShowingPlcHdr;
+CChangesSdtPrShowingPlcHdr.prototype.Type = AscDFH.historyitem_SdtPr_ShowingPlcHdr;
+CChangesSdtPrShowingPlcHdr.prototype.private_SetValue = function(Value)
+{
+	this.Class.Pr.ShowingPlcHdr = Value;
+};
+/**
+ * @constructor
+ * @extends {AscDFH.CChangesBaseBoolProperty}
+ */
+function CChangesSdtPrEquation(Class, Old, New)
+{
+	AscDFH.CChangesBaseBoolProperty.call(this, Class, Old, New);
+}
+CChangesSdtPrEquation.prototype = Object.create(AscDFH.CChangesBaseBoolProperty.prototype);
+CChangesSdtPrEquation.prototype.constructor = CChangesSdtPrEquation;
+CChangesSdtPrEquation.prototype.Type = AscDFH.historyitem_SdtPr_Equation;
+CChangesSdtPrEquation.prototype.private_SetValue = function(Value)
+{
+	this.Class.Pr.Equation = Value;
+};
+/**
+ * @constructor
+ * @extends {AscDFH.CChangesBaseBoolProperty}
+ */
+function CChangesSdtPrText(Class, Old, New)
+{
+	AscDFH.CChangesBaseBoolProperty.call(this, Class, Old, New);
+}
+CChangesSdtPrText.prototype = Object.create(AscDFH.CChangesBaseBoolProperty.prototype);
+CChangesSdtPrText.prototype.constructor = CChangesSdtPrText;
+CChangesSdtPrText.prototype.Type = AscDFH.historyitem_SdtPr_Text;
+CChangesSdtPrText.prototype.private_SetValue = function(Value)
+{
+	this.Class.Pr.Text = Value;
+};
+/**
+ * @constructor
+ * @extends {AscDFH.CChangesBaseBoolProperty}
+ */
+function CChangesSdtPrTemporary(Class, Old, New)
+{
+	AscDFH.CChangesBaseBoolProperty.call(this, Class, Old, New);
+}
+CChangesSdtPrTemporary.prototype = Object.create(AscDFH.CChangesBaseBoolProperty.prototype);
+CChangesSdtPrTemporary.prototype.constructor = CChangesSdtPrTemporary;
+CChangesSdtPrTemporary.prototype.Type = AscDFH.historyitem_SdtPr_Temporary;
+CChangesSdtPrTemporary.prototype.private_SetValue = function(Value)
+{
+	this.Class.Pr.Temporary = Value;
 };

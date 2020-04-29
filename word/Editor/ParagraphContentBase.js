@@ -324,8 +324,21 @@ CParagraphContentBase.prototype.IsEmptyRange = function(nCurLine, nCurRange)
 CParagraphContentBase.prototype.Check_Range_OnlyMath = function(Checker, CurRange, CurLine)
 {
 };
-CParagraphContentBase.prototype.Check_MathPara = function(Checker)
+/**
+ * Проверяем является ли элемент в заданной позиции неинлайновой формулой
+ * @param {number} nMathPos
+ * @return {boolean}
+ */
+CParagraphContentBase.prototype.CheckMathPara = function(nMathPos)
 {
+	return false;
+};
+CParagraphContentBase.prototype.ProcessNotInlineObjectCheck = function(oChecker)
+{
+};
+CParagraphContentBase.prototype.CheckNotInlineObject = function(nMathPos, nDirection)
+{
+	return false;
 };
 CParagraphContentBase.prototype.Check_PageBreak = function()
 {
@@ -819,7 +832,21 @@ CParagraphContentBase.prototype.GetFirstRunElementPos = function(nType, oStartPo
 {
 	return false;
 };
+/**
+ * Устанавливаем текущие позиции на текущий элемент
+ */
+CParagraphContentBase.prototype.SetThisElementCurrentInParagraph = function()
+{
+	var oParagraph = this.GetParagraph();
+	if (!this.IsCursorPlaceable() || !oParagraph)
+		return;
 
+	var oContentPos = this.Paragraph.Get_PosByElement(this);
+	if (!oContentPos)
+		return;
+
+	this.Paragraph.Set_ParaContentPos(oContentPos, true, -1, -1, false);
+};
 
 /**
  * Это базовый класс для элементов содержимого(контент) параграфа, у которых есть свое содержимое.
@@ -1001,6 +1028,10 @@ CParagraphContentWithContentBase.prototype.private_UpdateDocumentOutline = funct
 CParagraphContentWithContentBase.prototype.IsSolid = function()
 {
 	return false;
+};
+CParagraphContentWithContentBase.prototype.ConvertParaContentPosToRangePos = function(oContentPos, nDepth)
+{
+	return 0;
 };
 /**
  * Это базовый класс для элементов параграфа, которые сами по себе могут содержать элементы параграфа.
@@ -2185,8 +2216,10 @@ CParagraphContentWithParagraphLikeContent.prototype.Recalculate_Range = function
     {
         var Item = this.Content[Pos];
 
-        if (para_Math === Item.Type)
-            Item.Set_Inline(true);
+		if (para_Math === Item.Type)
+		{
+			Item.Set_Inline(!this.CheckMathPara(Pos));
+		}
 
         if ( ( 0 === Pos && 0 === CurLine && 0 === CurRange ) || Pos !== RangeStartPos )
         {
@@ -2333,10 +2366,64 @@ CParagraphContentWithParagraphLikeContent.prototype.Check_Range_OnlyMath = funct
             break;
     }
 };
-CParagraphContentWithParagraphLikeContent.prototype.Check_MathPara = function(Checker)
+/**
+ * Проверяем является ли элемент в заданной позиции неинлайновой формулой
+ * @param {number} nMathPos
+ * @return {boolean}
+ */
+CParagraphContentWithParagraphLikeContent.prototype.CheckMathPara = function(nMathPos)
 {
-    Checker.Result = false;
-    Checker.Found  = true;
+	if (!this.Content[nMathPos] || para_Math !== this.Content[nMathPos].Type)
+		return false;
+
+	return this.CheckNotInlineObject(nMathPos);
+};
+CParagraphContentWithParagraphLikeContent.prototype.ProcessNotInlineObjectCheck = function(oChecker)
+{
+	oChecker.Result = false;
+	oChecker.Found  = true;
+};
+CParagraphContentWithParagraphLikeContent.prototype.CheckNotInlineObject = function(nMathPos, nDirection)
+{
+	var oParent = this.GetParent();
+
+	var oChecker = new CParagraphMathParaChecker();
+	if (undefined === nDirection || -1 === nDirection)
+	{
+		oChecker.SetDirection(-1);
+		for (var nCurPos = nMathPos - 1; nCurPos >= 0; --nCurPos)
+		{
+			this.Content[nCurPos].ProcessNotInlineObjectCheck(oChecker);
+			if (oChecker.IsStop())
+				break;
+		}
+
+		if (!oChecker.GetResult())
+			return false;
+
+
+		if (!oChecker.IsStop() && oParent && !oParent.CheckNotInlineObject(this.GetPosInParent(oParent), -1))
+			return false
+	}
+
+	if (undefined === nDirection || 1 === nDirection)
+	{
+		oChecker.SetDirection(1);
+		for (var nCurPos = nMathPos + 1, nCount = this.Content.length; nCurPos < nCount; ++nCurPos)
+		{
+			this.Content[nCurPos].ProcessNotInlineObjectCheck(oChecker);
+			if (oChecker.IsStop())
+				break;
+		}
+
+		if (!oChecker.GetResult())
+			return false;
+
+		if (!oChecker.IsStop() && oParent && !oParent.CheckNotInlineObject(this.GetPosInParent(oParent), 1))
+			return false;
+	}
+
+	return true;
 };
 CParagraphContentWithParagraphLikeContent.prototype.Check_PageBreak = function()
 {
@@ -2623,6 +2710,21 @@ CParagraphContentWithParagraphLikeContent.prototype.Get_ElementByPos = function(
     	return null;
 
     return this.Content[CurPos].Get_ElementByPos(ContentPos, Depth + 1);
+};
+CParagraphContentWithParagraphLikeContent.prototype.ConvertParaContentPosToRangePos = function(oContentPos, nDepth)
+{
+	var nRangePos = 0;
+
+	var nCurPos = oContentPos ? Math.max(0, Math.min(this.Content.length - 1, oContentPos.Get(nDepth))) : this.Content.length - 1;
+	for (var nPos = 0; nPos < nCurPos; ++nPos)
+	{
+		nRangePos += this.Content[nPos].ConvertParaContentPosToRangePos(null);
+	}
+
+	if (this.Content[nCurPos])
+		nRangePos += this.Content[nCurPos].ConvertParaContentPosToRangePos(oContentPos, nDepth + 1);
+
+	return nRangePos;
 };
 CParagraphContentWithParagraphLikeContent.prototype.Get_PosByDrawing = function(Id, ContentPos, Depth)
 {

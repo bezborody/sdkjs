@@ -84,7 +84,9 @@ function Paragraph(DrawingDocument, Parent, bFromPresentation)
         T2 : 0,
         W2 : 0,
         H2 : 0,
-        PageIndex : 0
+        PageIndex : 0,
+		StartIndex: 0,
+		FlowCount: 0
     };
 
     // Данный TextPr будет относится только к символу конца параграфа
@@ -117,20 +119,20 @@ function Paragraph(DrawingDocument, Parent, bFromPresentation)
         Line  : 0,
         Range : 0
     }; //new ParaEnd();
-    
+
     this.CurPos    = new CParagraphCurPos();
     this.Selection = new CParagraphSelection();
-    
+
     this.DrawingDocument = null;
     this.LogicDocument   = null;
     this.bFromDocument   = true;
-    
+
     if ( undefined !== DrawingDocument && null !== DrawingDocument )
-    {
-        this.DrawingDocument = DrawingDocument;
-        this.LogicDocument   = this.DrawingDocument.m_oLogicDocument;
-        this.bFromDocument   = bFromPresentation === true ? false : !!this.LogicDocument;
-    }   
+	{
+		this.DrawingDocument = DrawingDocument;
+		this.LogicDocument   = this.DrawingDocument.m_oLogicDocument;
+		this.bFromDocument   = bFromPresentation === true ? false : !!this.LogicDocument;
+	}
     else
     {
         this.bFromDocument = !(true === bFromPresentation);
@@ -181,7 +183,7 @@ function Paragraph(DrawingDocument, Parent, bFromPresentation)
     this.m_oPRSC = new CParagraphRecalculateStateCounter();
     this.m_oPRSA = new CParagraphRecalculateStateAlign();
     this.m_oPRSI = new CParagraphRecalculateStateInfo();
-    
+
     this.m_oPDSE = new CParagraphDrawStateElements();
     this.StartState = null;
 
@@ -201,14 +203,6 @@ Paragraph.prototype.constructor = Paragraph;
 Paragraph.prototype.GetType = function()
 {
 	return type_Paragraph;
-};
-/**
- * Получаем ссылку на глобальный класс документа
- * @returns {CDocument}
- */
-Paragraph.prototype.GetLogicDocument = function()
-{
-	return this.LogicDocument;
 };
 Paragraph.prototype.Save_StartState = function()
 {
@@ -674,7 +668,7 @@ Paragraph.prototype.private_RecalculateColumnLimits = function()
 	this.X_ColumnStart = X;
 	this.X_ColumnEnd   = XLimit;
 
-	if (this.bFromDocument && this.LogicDocument && this.LogicDocument.GetCompatibilityMode() <= document_compatibility_mode_Word14)
+	if (this.bFromDocument && this.LogicDocument && this.LogicDocument.GetCompatibilityMode() <= AscCommon.document_compatibility_mode_Word14)
 	{
 		// Тут работает не совсем так как в MSWord версии 14 и раньше. Мы берем первые текстовые настройки и по ним
 		// оцениваем высоту первой строки. В MSWord идет расчет первой строки и берутся ее точные параметры.
@@ -1079,6 +1073,25 @@ Paragraph.prototype.Internal_Content_Remove2 = function(Pos, Count)
 			ParaContentPos.Data[0] = Math.max(0, Pos);
 	}
 
+	// Обновляем позиции в SearchResults
+	for (var Id in this.SearchResults)
+	{
+		var ContentPos = this.SearchResults[Id].StartPos;
+
+		// TODO: Ситуации Pos + Count > ContentPos.Data[0] > Pos быть не должно
+		if (ContentPos.Data[0] > Pos + Count)
+			ContentPos.Data[0] -= Count;
+		else if (ContentPos.Data[0] > Pos)
+			ContentPos.Data[0] = Math.max(0, Pos);
+
+		ContentPos = this.SearchResults[Id].EndPos;
+
+		if (ContentPos.Data[0] > Pos + Count)
+			ContentPos.Data[0] -= Count;
+		else if (ContentPos.Data[0] > Pos)
+			ContentPos.Data[0] = Math.max(0, Pos);
+	}
+
 	this.Content.splice(Pos, Count);
 	this.private_UpdateSelectionPosOnRemove(Pos, Count);
 
@@ -1216,6 +1229,27 @@ Paragraph.prototype.Get_ParaPosByContentPos = function(ContentPos)
 
 	return ParaPos;
 };
+/**
+ * Функция для перевода позиции внутри параграфа в специальную позицию используемую в ApiRange
+ * @param {CParagraphContentPos} oContentPos
+ * @return {number}
+ */
+Paragraph.prototype.ConvertParaContentPosToRangePos = function(oContentPos)
+{
+	var nRangePos = 0;
+
+	var nCurPos = oContentPos ? Math.max(0, Math.min(this.Content.length - 1, oContentPos.Get(0))) : this.Content.length;
+	
+	for (var nPos = 0; nPos < nCurPos; ++nPos)
+	{
+		nRangePos += this.Content[nPos].ConvertParaContentPosToRangePos(null);
+	}
+
+	if (this.Content[nCurPos])
+		nRangePos += this.Content[nCurPos].ConvertParaContentPosToRangePos(oContentPos, 1);
+
+	return nRangePos;
+};
 Paragraph.prototype.Check_Range_OnlyMath = function(CurRange, CurLine)
 {
 	var StartPos = this.Lines[CurLine].Ranges[CurRange].StartPos;
@@ -1235,65 +1269,73 @@ Paragraph.prototype.Check_Range_OnlyMath = function(CurRange, CurLine)
 
 	return Checker.Math;
 };
-Paragraph.prototype.Check_MathPara = function(MathPos)
+/**
+ * Проверяем является ли элемент в заданной позиции неинлайновой формулой
+ * @param {number} nMathPos
+ * @return {boolean}
+ */
+Paragraph.prototype.CheckMathPara = function(nMathPos)
 {
-	if (undefined === this.Content[MathPos] || para_Math !== this.Content[MathPos].Type)
+	if (!this.Content[nMathPos] || para_Math !== this.Content[nMathPos].Type)
 		return false;
 
-	var MathParaChecker = new CParagraphMathParaChecker();
-
-	// Нам надо пробежаться впереди назад и найти ближайшие элементы.
-	MathParaChecker.Direction = -1;
-	for (var CurPos = MathPos - 1; CurPos >= 0; CurPos--)
+	return this.CheckNotInlineObject(nMathPos);
+};
+/**
+ * Проверяем является ли объект в заданной позиции не инлайновой
+ * @param {number} nMathPos
+ * @param {number | undefined} nDirection направление в котором нужно проверить, если не задано, то проверяем в обоих
+ * @return {boolean}
+ */
+Paragraph.prototype.CheckNotInlineObject = function(nMathPos, nDirection)
+{
+	var oChecker = new CParagraphMathParaChecker();
+	if (undefined === nDirection || -1 === nDirection)
 	{
-		if (this.Content[CurPos].Check_MathPara)
+		oChecker.SetDirection(-1);
+		for (var nCurPos = nMathPos - 1; nCurPos >= 0; --nCurPos)
 		{
-			this.Content[CurPos].Check_MathPara(MathParaChecker);
-
-			if (false !== MathParaChecker.Found)
+			this.Content[nCurPos].ProcessNotInlineObjectCheck(oChecker);
+			if (oChecker.IsStop())
 				break;
 		}
-	}
 
-	// Нумерация привязанная к формуле делает ее inline.
-	if (true !== MathParaChecker.Found)
-	{
-		if(this.bFromDocument)
+		// Нумерация привязанная к формуле делает ее inline.
+		if (!oChecker.IsStop())
 		{
-            if(undefined !== this.GetNumPr())
+			if (this.bFromDocument)
 			{
-				return false;
+				if (undefined !== this.GetNumPr())
+				{
+					return false;
+				}
+			}
+			else
+			{
+				if (undefined !== this.Get_CompiledPr2(false).ParaPr.Bullet)
+				{
+					return false;
+				}
 			}
 		}
-		else
-		{
-			if(undefined !== this.Get_CompiledPr2(false).ParaPr.Bullet)
-			{
-				return false;
-			}
-		}
+
+		if (!oChecker.GetResult())
+			return false;
 	}
 
-	if (true !== MathParaChecker.Result)
-		return false;
-
-	MathParaChecker.Direction = 1;
-	MathParaChecker.Found     = false;
-
-	var Count = this.Content.length;
-	for (var CurPos = MathPos + 1; CurPos < Count; CurPos++)
+	if (undefined === nDirection || 1 === nDirection)
 	{
-		if (this.Content[CurPos].Check_MathPara)
+		oChecker.SetDirection(1);
+		for (var nCurPos = nMathPos + 1, nCount = this.Content.length; nCurPos < nCount; ++nCurPos)
 		{
-			this.Content[CurPos].Check_MathPara(MathParaChecker);
-
-			if (false !== MathParaChecker.Found)
+			this.Content[nCurPos].ProcessNotInlineObjectCheck(oChecker);
+			if (oChecker.IsStop())
 				break;
 		}
-	}
 
-	if (true !== MathParaChecker.Result)
-		return false;
+		if (!oChecker.GetResult())
+			return false;
+	}
 
 	return true;
 };
@@ -3227,7 +3269,7 @@ Paragraph.prototype.Remove = function(nCount, isRemoveWholeElement, bRemoveOnlyS
 				this.RemoveFromContent(StartPos + 1, EndPos - StartPos - 1);
 			}
 
-			var isFootnoteRefRun = (para_Run === this.Content[StartPos].Type && this.Content[StartPos].IsFootnoteReferenceRun());
+			var isFootEndnoteRefRun = (para_Run === this.Content[StartPos].Type && this.Content[StartPos].IsFootEndnoteReferenceRun());
 
 
 			if (this.Content[StartPos].IsSolid())
@@ -3251,9 +3293,9 @@ Paragraph.prototype.Remove = function(nCount, isRemoveWholeElement, bRemoveOnlyS
 					this.RemoveFromContent(StartPos, 1);
 					isStartDeleted = true;
 				}
-				else if (isFootnoteRefRun)
+				else if (isFootEndnoteRefRun)
 				{
-					this.Content[StartPos].Set_RStyle(undefined);
+					this.Content[StartPos].SetRStyle(undefined);
 				}
 			}
 
@@ -3700,6 +3742,8 @@ Paragraph.prototype.Add = function(Item)
 		case para_NewLine:
 		case para_FootnoteReference:
 		case para_FootnoteRef:
+		case para_EndnoteReference:
+		case para_EndnoteRef:
 		case para_Separator:
 		case para_ContinuationSeparator:
 		default:
@@ -8106,7 +8150,7 @@ Paragraph.prototype.GetCalculatedTextPr = function()
 			TextPr = this.Content[this.CurPos.ContentPos].Get_CompiledTextPr(true);
 
 			var oRun = this.Get_ElementByPos(this.Get_ParaContentPos(false, false, false));
-			if (para_Run === oRun.Type && oRun.private_IsCurPosNearFootnoteReference())
+			if (para_Run === oRun.Type && oRun.IsCurPosNearFootEndnoteReference())
 				TextPr.VertAlign = AscCommon.vertalign_Baseline;
 		}
 	}
@@ -11120,7 +11164,7 @@ Paragraph.prototype.Get_FrameBounds = function(FrameX, FrameY, FrameW, FrameH)
 		var ParaPr = Para.Get_CompiledPr2(false).ParaPr;
 		var Brd    = ParaPr.Brd;
 
-		var _X0 = (undefined != Brd.Left && border_None != Brd.Left.Value ? Math.min(X0, X0 + ParaPr.Ind.Left, X0 + ParaPr.Ind.Left + ParaPr.Ind.FirstLine) : X0 + ParaPr.Ind.Left + ParaPr.Ind.FirstLine);
+		var _X0 = (undefined != Brd.Left && border_None != Brd.Left.Value ? Math.min(FrameX, FrameX + ParaPr.Ind.Left, FrameX + ParaPr.Ind.Left + ParaPr.Ind.FirstLine) : FrameX + ParaPr.Ind.Left + ParaPr.Ind.FirstLine);
 
 		if (undefined != Brd.Left && border_None != Brd.Left.Value)
 			_X0 -= Brd.Left.Size + Brd.Left.Space + 1;
@@ -11128,7 +11172,7 @@ Paragraph.prototype.Get_FrameBounds = function(FrameX, FrameY, FrameW, FrameH)
 		if (_X0 < X0)
 			X0 = _X0;
 
-		var _X1 = X1 - ParaPr.Ind.Right;
+		var _X1 = FrameX + FrameW - ParaPr.Ind.Right;
 
 		if (undefined != Brd.Right && border_None != Brd.Right.Value)
 			_X1 += Brd.Right.Size + Brd.Right.Space + 1;
@@ -11147,7 +11191,7 @@ Paragraph.prototype.Get_FrameBounds = function(FrameX, FrameY, FrameW, FrameH)
 
 	return {X : X0, Y : Y0, W : X1 - X0, H : Y1 - Y0};
 };
-Paragraph.prototype.Set_CalculatedFrame = function(L, T, W, H, L2, T2, W2, H2, PageIndex)
+Paragraph.prototype.Set_CalculatedFrame = function(L, T, W, H, L2, T2, W2, H2, PageIndex, StartIndex, FlowCount)
 {
 	this.CalculatedFrame.T         = T;
 	this.CalculatedFrame.L         = L;
@@ -11158,6 +11202,8 @@ Paragraph.prototype.Set_CalculatedFrame = function(L, T, W, H, L2, T2, W2, H2, P
 	this.CalculatedFrame.W2        = W2;
 	this.CalculatedFrame.H2        = H2;
 	this.CalculatedFrame.PageIndex = PageIndex;
+	this.CalculatedFrame.StartIndex = StartIndex;
+	this.CalculatedFrame.FlowCount = FlowCount;
 };
 Paragraph.prototype.Get_CalculatedFrame = function()
 {
@@ -11702,7 +11748,7 @@ Paragraph.prototype.Split = function(NewParagraph)
 
 	NewParagraph.DeleteCommentOnRemove = true;
 	this.DeleteCommentOnRemove         = true;
-	
+
 	return NewParagraph;
 };
 /**
@@ -13144,7 +13190,7 @@ Paragraph.prototype.UpdateDocumentOutline = function()
 	if (isCheck)
 	{
 		var oDocumentOutline = this.LogicDocument.GetDocumentOutline();
-		if (oDocumentOutline.IsUse())
+		if (oDocumentOutline && oDocumentOutline.IsUse())
 			oDocumentOutline.CheckParagraph(this);
 	}
 };
@@ -13708,7 +13754,7 @@ Paragraph.prototype.GetText = function(oPr)
 	var oText = new CParagraphGetText();
 
 	oText.SetBreakOnNonText(false);
-	oText.SetParaEndToSpace(true);
+	oText.SetParaEndToSpace(oPr && undefined !== oPr.ParaEndToSpace ? oPr.ParaEndToSpace: true);
 
 	for (var nIndex = 0, nCount = this.Content.length; nIndex < nCount; ++nIndex)
 	{
@@ -13732,6 +13778,8 @@ Paragraph.prototype.CheckFootnote = function(X, Y, CurPage)
 	}
 	else if (this.Lines[CurLine].Info & paralineinfo_Notes)
 	{
+		// TODO Endnotes: добавить обработку концевых сносок
+
 		var arrFootnoteRefs = this.private_GetFootnoteRefsInLine(CurLine);
 		var nMinDiff = 1000000000;
 		var oNote = null;
@@ -14566,7 +14614,7 @@ Paragraph.prototype.GetAllFields = function(isUseSelection, arrFields)
  */
 Paragraph.prototype.IsCondensedSpaces = function()
 {
-	if (this.bFromDocument && this.LogicDocument && this.LogicDocument.GetCompatibilityMode() >= document_compatibility_mode_Word15 && this.Get_CompiledPr2(false).ParaPr.Jc === align_Justify)
+	if (this.bFromDocument && this.LogicDocument && this.LogicDocument.GetCompatibilityMode() >= AscCommon.document_compatibility_mode_Word15 && this.Get_CompiledPr2(false).ParaPr.Jc === align_Justify)
 		return true;
 
 	return false;
@@ -15522,9 +15570,9 @@ function CParagraphSelection()
     this.StartPos  = 0;
     this.EndPos    = 0;
     this.Flag      = selectionflag_Common;
-    
+
     this.StartManually = true; // true - через Selection_SetStart, false - через Selection_SetBegEnd
-    this.EndManually   = true; // true - через Selection_SetEnd, афдыу - через Selection_SetBegEnd  
+    this.EndManually   = true; // true - через Selection_SetEnd, афдыу - через Selection_SetBegEnd
 }
 
 CParagraphSelection.prototype =
@@ -16261,7 +16309,7 @@ function CParagraphSearchPos()
     this.Punctuation = false;
     this.First       = true;
     this.UpdatePos   = false;
-    
+
     this.ForSelection = false;
 
     this.CheckAnchors = false;
@@ -16663,14 +16711,14 @@ CRunRecalculateObject.prototype =
 
         return true;
     },
-    
+
     private_Get_RangeOffset : function(LineIndex, RangeIndex)
     {
         return (1 + this.Lines[0] + this.Lines[1 + LineIndex] + RangeIndex * 2);
     },
-    
+
     private_Get_RangeStartPos : function(LineIndex, RangeIndex)
-    { 
+    {
         return this.Lines[this.private_Get_RangeOffset(LineIndex, RangeIndex)];
     },
 
@@ -16678,19 +16726,19 @@ CRunRecalculateObject.prototype =
     {
         return this.Lines[this.private_Get_RangeOffset(LineIndex, RangeIndex) + 1];
     },
-    
+
     private_Get_LinesCount : function()
     {
         return this.Lines[0];
     },
-    
+
     private_Get_RangesCount : function(LineIndex)
     {
         if (LineIndex === this.Lines[0] - 1)
             return (this.Lines.length - this.Lines[1 + LineIndex]) / 2;
         else
             return (this.Lines[1 + LineIndex + 1] - this.Lines[1 + LineIndex]) / 2;
-    }    
+    }
 };
 
 function CParagraphRunElements(ContentPos, Count, arrTypes, isReverse)
@@ -16852,7 +16900,7 @@ function CParagraphRangeVisibleWidth()
 function CParagraphMathRangeChecker()
 {
     this.Math   = null; // Искомый элемент
-    this.Result = true; // Если есть отличные от Math элементы, тогда false, если нет, тогда true 
+    this.Result = true; // Если есть отличные от Math элементы, тогда false, если нет, тогда true
 }
 
 function CParagraphMathParaChecker()
@@ -16861,6 +16909,20 @@ function CParagraphMathParaChecker()
     this.Result    = true;
     this.Direction = 0;
 }
+CParagraphMathParaChecker.prototype.SetDirection = function(nDirection)
+{
+	this.Direction = nDirection;
+	this.Found     = false;
+	this.Result    = true;
+};
+CParagraphMathParaChecker.prototype.IsStop = function()
+{
+	return this.Found;
+};
+CParagraphMathParaChecker.prototype.GetResult = function()
+{
+	return this.Result;
+};
 
 
 function CParagraphStartState(Paragraph)

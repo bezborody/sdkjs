@@ -469,25 +469,33 @@
 	{
 		return this.isViewMode;
 	};
+	baseEditorsApi.prototype.asc_addRestriction              = function(val)
+	{
+		this.restrictions |= val;
+	};
+	baseEditorsApi.prototype.asc_removeRestriction           = function(val)
+	{
+		this.restrictions &= ~val;
+	};
 	baseEditorsApi.prototype.canEdit                         = function()
 	{
 		return !this.isViewMode && this.restrictions === Asc.c_oAscRestrictionType.None;
 	};
 	baseEditorsApi.prototype.isRestrictionForms              = function()
 	{
-		return (this.restrictions === Asc.c_oAscRestrictionType.OnlyForms);
+		return (this.restrictions & Asc.c_oAscRestrictionType.OnlyForms);
 	};
 	baseEditorsApi.prototype.isRestrictionComments           = function()
 	{
-		return (this.restrictions === Asc.c_oAscRestrictionType.OnlyComments);
+		return (this.restrictions & Asc.c_oAscRestrictionType.OnlyComments);
 	};
 	baseEditorsApi.prototype.isRestrictionSignatures         = function()
 	{
-		return (this.restrictions === Asc.c_oAscRestrictionType.OnlySignatures);
+		return (this.restrictions & Asc.c_oAscRestrictionType.OnlySignatures);
 	};
 	baseEditorsApi.prototype.isRestrictionView               = function()
 	{
-		return (this.restrictions === Asc.c_oAscRestrictionType.View);
+		return (this.restrictions & Asc.c_oAscRestrictionType.View);
 	};
 	baseEditorsApi.prototype.isLongAction                    = function()
 	{

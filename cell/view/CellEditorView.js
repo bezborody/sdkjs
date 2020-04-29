@@ -318,12 +318,11 @@
 		this._updateUndoRedoChanged();
 	};
 
-	CellEditor.prototype.close = function (saveValue, bApplyByArray, callback) {
+	CellEditor.prototype.close = function (saveValue, callback) {
 		var opt = this.options;
 		var t = this;
 
 		var localSaveValueCallback = function(isSuccess) {
-			t.textFlags.bApplyByArray = null;
 			if(!isSuccess) {
 				t.handlers.trigger('setStrictClose', true);
 				if(callback) {
@@ -377,7 +376,6 @@
 					this.noUpdateMode = false;
 				}
 
-				this.textFlags.bApplyByArray = bApplyByArray;
 				return opt.saveValueCallback(opt.fragments, this.textFlags, localSaveValueCallback);
 			}
 		}
@@ -538,7 +536,10 @@
 	};
 
 	CellEditor.prototype.move = function () {
-		if (this.options.checkVisible()) {
+		if (!this.isOpened) {
+			return;
+		}
+		if (this.handlers.trigger('isActive') && this.options.checkVisible()) {
 			this.textFlags.wrapOnlyCE = false;
 			this.sides = this.options.getSides();
 			this.left = this.sides.cellX;
@@ -760,12 +761,11 @@
 	};
 
 	CellEditor.prototype._parseFormulaRanges = function () {
-		var s = AscCommonExcel.getFragmentsText(
-			this.options.fragments), t = this, ret = false, range, wsOPEN = this.handlers.trigger(
-			"getCellFormulaEnterWSOpen"), ws = wsOPEN ? wsOPEN.model : this.handlers.trigger("getActiveWS");
-
+		var s = AscCommonExcel.getFragmentsText(this.options.fragments), t = this,
+			wsOPEN = this.handlers.trigger("getCellFormulaEnterWSOpen"),
+			ws = wsOPEN ? wsOPEN.model : this.handlers.trigger("getActiveWS");
 		if (s.length < 1 || s.charAt(0) !== "=") {
-			return ret;
+			return;
 		}
 
 		/*function cb(ref){
@@ -783,136 +783,49 @@
 		 }
 		 }*/
 
-//             var __s__ = new Date().getTime();
-//             var parres = parserTest.parse(s,cb);
-//             var __e__ = new Date().getTime();
-//             console.log("e-s "+ (__e__ - __s__));
-
 		var bbox = this.options.bbox;
 		this._parseResult = new AscCommonExcel.ParseResult([], []);
 		var cellWithFormula = new window['AscCommonExcel'].CCellWithFormula(ws, bbox.r1, bbox.c1);
 		this._formula = new AscCommonExcel.parserFormula(s.substr(1), cellWithFormula, ws);
 		this._formula.parse(true, true, this._parseResult, true);
 
-		var r, offset, _e, _s, wsName = null, refStr, isName = false, _sColorPos, localStrObj;
+		var r, oper, wsName = null, bboxOper, isName = false;
 
 		if (this._parseResult.refPos && this._parseResult.refPos.length > 0) {
 			for (var index = 0; index < this._parseResult.refPos.length; index++) {
 				wsName = null;
 				isName = false;
+				bboxOper = null;
 				r = this._parseResult.refPos[index];
-
-				offset = r.end;
-				_e = r.end;
-				_sColorPos = _s = r.start;
-
-
-				switch (r.oper.type) {
-					case cElementType.cell          : {
-						if (wsOPEN) {
-							wsName = wsOPEN.model.getName();
-						}
-						ret = true;
-						refStr = r.oper.toLocaleString();
-						break;
-					}
-					case cElementType.cell3D        : {
-						localStrObj = r.oper.toLocaleStringObj();
-						refStr = localStrObj[1];
-						ret = true;
-						wsName = r.oper.getWS().getName();
-						_s = _e - localStrObj[1].length;
-						_sColorPos = _e - localStrObj[0].length;
-						break;
-					}
-					case cElementType.cellsRange    : {
-						if (wsOPEN) {
-							wsName = wsOPEN.model.getName();
-						}
-						ret = true;
-						refStr = r.oper.toLocaleString();
-						break;
-					}
-					case cElementType.cellsRange3D  : {
-						if (!r.oper.isSingleSheet()) {
-							continue;
-						}
-						ret = true;
-						localStrObj = r.oper.toLocaleStringObj();
-						refStr = localStrObj[1];
-						wsName = r.oper.getWS().getName();
-						_s = _e - localStrObj[1].length;
-						_sColorPos = _e - localStrObj[0].length;
-						break;
-					}
-					case cElementType.table          :
-					case cElementType.name          :
-					case cElementType.name3D : {
-						var nameRef = r.oper.toRef(bbox);
-						if (nameRef instanceof AscCommonExcel.cError) {
-							continue;
-						}
-						switch (nameRef.type) {
-
-							case cElementType.cellsRange3D          : {
-								if (!nameRef.isSingleSheet()) {
-									continue;
-								}
-								
-								ret = true;
-								localStrObj = nameRef.toLocaleStringObj();
-								refStr = localStrObj[1];
-								wsName = nameRef.getWS().getName();
-
-								localStrObj = r.oper.toLocaleStringObj();
-								_s = _e - localStrObj[1].length;
-								_sColorPos = _e - localStrObj[0].length;
-								break;
-							}
-							case cElementType.cellsRange          :{
-								ret = true;
-								localStrObj = r.oper.toLocaleStringObj();
-								refStr = localStrObj[1];
-								wsName = nameRef.getWS().getName();
-								_s = _e - localStrObj[1].length;
-								break;
-							}
-							case cElementType.cell3D        : {
-								ret = true;
-								localStrObj = nameRef.toLocaleStringObj();
-								refStr = localStrObj[1];
-								wsName = nameRef.getWS().getName();
-
-								localStrObj = r.oper.toLocaleStringObj();
-								_s = _e - localStrObj[1].length;
-								_sColorPos = _e - localStrObj[0].length;
-								break;
-							}
-						}
-						isName = true;
-						break;
-					}
-					default                         :
+				oper = r.oper;
+				if (cElementType.table === oper.type || cElementType.name === oper.type || cElementType.name3D === oper.type) {
+					oper = r.oper.toRef(bbox);
+					if (oper instanceof AscCommonExcel.cError) {
 						continue;
+					}
+					isName = true;
 				}
-
-				if (ret) {
-					range = t._parseRangeStr(refStr);
-					if (!range) {
-						return false;
+				if (cElementType.cell === oper.type || cElementType.cellsRange === oper.type || cElementType.cell3D === oper.type) {
+					wsName = oper.getWS().getName();
+					bboxOper = oper.getBBox0();
+				} else if (cElementType.cellsRange3D === oper.type) {
+					if (oper.isSingleSheet()) {
+						wsName = oper.getWS().getName();
+						bboxOper = oper.getBBox0NoCheck();
+					} else if (oper.isBetweenSheet(ws)) {
+						wsName = ws.getName();
+						bboxOper = oper.getBBox0NoCheck();
 					}
-					range.cursorePos = offset - (_e - _s) + 1;
-					range.formulaRangeLength = _e - _s;
-					range.colorRangePos = offset - (_e - _sColorPos) + 1;
-					range.colorRangeLength = _e - _sColorPos;
-					if (isName) {
-						range.isName = isName;
-					}
-					t.handlers.trigger("newRange", range, wsName);
+				}
+				if (bboxOper) {
+					bboxOper = bboxOper.clone();
+					bboxOper.cursorePos = bboxOper.colorRangePos = r.start + 1;
+					bboxOper.formulaRangeLength = bboxOper.colorRangeLength = r.end - r.start;
+					bboxOper.isName = isName;
+					t.handlers.trigger("newRange", bboxOper, wsName);
 				}
 			}
 		}
-		return ret;
 	};
 
 	CellEditor.prototype._findRangeUnderCursor = function () {
@@ -2169,18 +2082,16 @@
 		t.undoMode = false;
 	};
 
-	CellEditor.prototype._tryCloseEditor = function (event, bApplyByArray) {
+	CellEditor.prototype._tryCloseEditor = function (event) {
 		var t = this;
 		var callback = function(success) {
-			//для случая, когда пользователь нажимает ctrl+shift+enter переход на новую строку не осуществляется
-			if(!bApplyByArray && success) {
+			//для случая, когда пользователь нажимает ctrl+shift+enter/crtl+enter переход на новую строку не осуществляется
+			var applyByArray = t.textFlags && t.textFlags.ctrlKey;
+			if(!applyByArray && success) {
 				t.handlers.trigger("applyCloseEvent", event);
 			}
 		};
-		if(!window['AscCommonExcel'].bIsSupportArrayFormula) {
-			bApplyByArray = false;
-		}
-		this.close(true, bApplyByArray, callback);
+		this.close(true, callback);
 	};
 
 	CellEditor.prototype._getAutoComplete = function (str) {
@@ -2297,7 +2208,11 @@
 							t._addNewLine();
 						} else {
 							if (false === t.handlers.trigger("isGlobalLockEditCell")) {
-								t._tryCloseEditor(event, event.shiftKey&&event.ctrlKey);
+								if (t.textFlags) {
+									t.textFlags.ctrlKey = event.ctrlKey;
+									t.textFlags.shiftKey = event.shiftKey;
+								}
+								t._tryCloseEditor(event);
 							}
 						}
 					}
@@ -2594,6 +2509,17 @@
 
 				event.stopPropagation();
 				event.preventDefault();
+				return false;
+
+			case 186: // ctrl + (shift) + ;
+				if (ctrlKey) {
+					var api = window["Asc"]["editor"];
+					var oDate = new Asc.cDate();
+					t._addChars(event.shiftKey ? oDate.getTimeString(api) : oDate.getDateString(api));
+					event.stopPropagation();
+					event.preventDefault();
+				}
+				t.skipKeyPress = false;
 				return false;
 		}
 

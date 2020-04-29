@@ -1241,7 +1241,6 @@ function GraphicOption(ws, type, range, offset) {
     this.ws = ws;
 	this.type = type;
 	this.range = range;
-
 	this.offset = offset;
 }
 
@@ -1256,7 +1255,28 @@ GraphicOption.prototype.getOffset = function () {
 	return this.offset;
 };
 
-function DrawingObjects() {
+
+    var rAF = (function() {
+        return window.requestAnimationFrame ||
+            window.webkitRequestAnimationFrame ||
+            window.mozRequestAnimationFrame ||
+            window.oRequestAnimationFrame ||
+            window.msRequestAnimationFrame ||
+            function(callback) { return setTimeout(callback, 1000/ 60); };
+    })();
+
+    var cAF = (function () {
+        return window.cancelAnimationFrame ||
+            window.cancelRequestAnimationFrame ||
+            window.webkitCancelAnimationFrame ||
+            window.webkitCancelRequestAnimationFrame ||
+            window.mozCancelRequestAnimationFrame ||
+            window.oCancelRequestAnimationFrame ||
+            window.msCancelRequestAnimationFrame ||
+            clearTimeout;
+    })();
+
+    function DrawingObjects() {
 
     //-----------------------------------------------------------------------------------
     // Scroll offset
@@ -1305,7 +1325,11 @@ function DrawingObjects() {
     _this.lastY = 0;
 
     _this.nCurPointItemsLength = -1;
+
+    _this.bUpdateMetrics = true;
+
     // Task timer
+    _this.animId = null;
     var aDrawTasks = [];
 
     function drawTaskFunction() {
@@ -1316,9 +1340,10 @@ function DrawingObjects() {
         var taskLen = aDrawTasks.length;
         if ( taskLen ) {
             var lastTask = aDrawTasks[taskLen - 1];
-            _this.showDrawingObjectsEx(lastTask.params.clearCanvas, lastTask.params.graphicOption, lastTask.params.printOptions);
+            _this.showDrawingObjectsEx(lastTask.clearCanvas, lastTask.graphicOption);
             aDrawTasks.splice(0, (taskLen - 1 > 0) ? taskLen - 1 : 1);
         }
+        _this.animId = null;
     }
 
     //-----------------------------------------------------------------------------------
@@ -1663,6 +1688,47 @@ function DrawingObjects() {
         return _this;
     };
 
+
+    DrawingBase.prototype.checkTarget = function(target, bEdit) {
+        if(!this.graphicObject) {
+            return false;
+        }
+        var bUpdateExtents = false;
+        var nType = bEdit ? this.graphicObject.getDrawingBaseType() : this.Type;
+        if(target.target === AscCommonExcel.c_oTargetType.RowResize) {
+            if(this.from.row >= target.row) {
+                if(nType === AscCommon.c_oAscCellAnchorType.cellanchorTwoCell ||
+                    nType === AscCommon.c_oAscCellAnchorType.cellanchorOneCell) {
+                    bUpdateExtents = true;
+                }
+            }
+            else if(this.to.row >= target.row) {
+                if(nType === AscCommon.c_oAscCellAnchorType.cellanchorTwoCell) {
+                    bUpdateExtents = true;
+                }
+            }
+        }
+        else {
+            if(this.from.col >= target.col) {
+                if(nType === AscCommon.c_oAscCellAnchorType.cellanchorTwoCell ||
+                    nType === AscCommon.c_oAscCellAnchorType.cellanchorOneCell) {
+                    bUpdateExtents = true;
+                }
+            }
+            else if(this.to.col >= target.col) {
+                if(nType === AscCommon.c_oAscCellAnchorType.cellanchorTwoCell) {
+                    bUpdateExtents = true;
+                }
+            }
+        }
+       return bUpdateExtents;
+    };
+
+    DrawingBase.prototype.draw = function (graphics) {
+        if(this.graphicObject) {
+            this.graphicObject.draw(graphics);
+        }
+    };
     //}
 
     //-----------------------------------------------------------------------------------
@@ -1837,10 +1903,6 @@ function DrawingObjects() {
 
     _this.init = function(currentSheet) {
  
-        if (!window['IS_NATIVE_EDITOR']) {
-            setInterval(drawTaskFunction, 5);
-        }
-
         var api = window["Asc"]["editor"];
         worksheet = currentSheet;
 
@@ -1850,7 +1912,7 @@ function DrawingObjects() {
         _this.objectLocker = new ObjectLocker(worksheet);
         _this.drawingArea = currentSheet.drawingArea;
         _this.drawingArea.init();
-        _this.drawingDocument = currentSheet.model.DrawingDocument ? currentSheet.model.DrawingDocument : new AscCommon.CDrawingDocument(this);
+        _this.drawingDocument = currentSheet.getDrawingDocument();
         _this.drawingDocument.drawingObjects = this;
         _this.drawingDocument.AutoShapesTrack = api.wb.autoShapeTrack;
         _this.drawingDocument.TargetHtmlElement = document.getElementById('id_target_cursor');
@@ -2046,29 +2108,45 @@ function DrawingObjects() {
     // Drawing objects
     //-----------------------------------------------------------------------------------
 
-    _this.showDrawingObjects = function(clearCanvas, graphicOption, printOptions) {
+    _this.showDrawingObjects = function(clearCanvas, graphicOption) {
 
-        var currTime = getCurrentTime();
-        if ( aDrawTasks.length ) {
-
-            var lastTask = aDrawTasks[aDrawTasks.length - 1];
-
-			// ToDo не всегда грамотно так делать, т.к. в одном scroll я могу прислать 2 области (и их объединять не нужно)
-            if ( lastTask.params.graphicOption && lastTask.params.graphicOption.isScrollType() && graphicOption && (lastTask.params.graphicOption.type === graphicOption.type) ) {
-                lastTask.params.graphicOption.range.c1 = Math.min(lastTask.params.graphicOption.range.c1, graphicOption.range.c1);
-                lastTask.params.graphicOption.range.r1 = Math.min(lastTask.params.graphicOption.range.r1, graphicOption.range.r1);
-                lastTask.params.graphicOption.range.c2 = Math.max(lastTask.params.graphicOption.range.c2, graphicOption.range.c2);
-                lastTask.params.graphicOption.range.r2 = Math.max(lastTask.params.graphicOption.range.r2, graphicOption.range.r2);
-                return;
-            }
-            if ( (currTime - lastTask.time < 40) )
-                return;
+        if(clearCanvas || !graphicOption) {
+            aDrawTasks.length = 0;
+            aDrawTasks.push({ clearCanvas: true, graphicOption: graphicOption})
         }
-
-        aDrawTasks.push({ time: currTime, params: { clearCanvas: clearCanvas, graphicOption: graphicOption, printOptions: printOptions} });
+        else {
+            if(aDrawTasks.length > 0) {
+                if(!aDrawTasks[0].clearCanvas) {
+                    if(graphicOption) {
+                        for(var nTask = 0; nTask < aDrawTasks.length; ++nTask) {
+                            var oTask = aDrawTasks[nTask];
+                            var oRange1 = oTask.graphicOption.range;
+                            var oRange2 = graphicOption.range;
+                            if(!oRange1 || !oRange2) {
+                                aDrawTasks.length = 0;
+                                aDrawTasks.push({ clearCanvas: true, graphicOption: graphicOption});
+                                break;
+                            }
+                            if(oRange1.isEqual(oRange2)) {
+                                break;
+                            }
+                        }
+                        if(nTask === aDrawTasks.length) {
+                            aDrawTasks.push({ clearCanvas: false, graphicOption: graphicOption});
+                        }
+                    }
+                }
+            }
+            else {
+                aDrawTasks.push({ clearCanvas: clearCanvas, graphicOption: graphicOption});
+            }
+        }
+        if(_this.animId === null) {
+            _this.animId = rAF(drawTaskFunction);
+        }
     };
 
-    _this.showDrawingObjectsEx = function(clearCanvas, graphicOption, printOptions) {
+    _this.showDrawingObjectsEx = function(clearCanvas, graphicOption) {
 
         /*********** Print Options ***************
          printOptions : {
@@ -2078,15 +2156,15 @@ function DrawingObjects() {
          *****************************************/
 
         // Undo/Redo
-        if ( (worksheet.model.index != api.wb.model.getActive()) && !printOptions )
+        if ( (worksheet.model.index !== api.wb.model.getActive()))
             return;
 
-        if ( drawingCtx ) {
+        if(drawingCtx) {
             if ( clearCanvas ) {
                 _this.drawingArea.clear();
             }
 
-            if ( aObjects.length || api.watermarkDraw ) {
+            if(aObjects.length > 0) {
                 var shapeCtx = api.wb.shapeCtx;
                 if (graphicOption) {
                     // Выставляем нужный диапазон для отрисовки
@@ -2113,8 +2191,10 @@ function DrawingObjects() {
                     shapeCtx.m_oContext.clip();
 
                     shapeCtx.updatedRect = updatedRect;
-                } else
+                }
+                else {
                     shapeCtx.updatedRect = null;
+                }
 
 
                 for (var i = 0; i < aObjects.length; i++) {
@@ -2122,24 +2202,10 @@ function DrawingObjects() {
 
                     // Shape render (drawForPrint)
                     if ( drawingObject.isGraphicObject() ) {
-                        if ( printOptions ) {
+                        _this.drawingArea.drawObject(drawingObject);
 
-                            var range = printOptions.printPagesData.pageRange;
-                            var printPagesData = printOptions.printPagesData;
-                            var offsetCols = printPagesData.startOffsetPx;
-
-                            var left = worksheet.getCellLeft(range.c1, 3) - worksheet.getCellLeft(0, 3) - pxToMm(printPagesData.leftFieldInPx + printOptions.titleWidth);
-                            var top = worksheet.getCellTop(range.r1, 3) - worksheet.getCellTop(0, 3) - pxToMm(printPagesData.topFieldInPx + printOptions.titleHeight);
-
-                            _this.printGraphicObject(drawingObject.graphicObject, printOptions.ctx.DocumentRenderer, top, left);
-                        }
-                        else {
-                            _this.drawingArea.drawObject(drawingObject);
-                        }
                     }
                 }
-
-
 				if (graphicOption)
                 {
                     shapeCtx.m_oContext.restore();
@@ -2147,16 +2213,19 @@ function DrawingObjects() {
             }
             worksheet.model.Drawings = aObjects;
         }
-
-        if ( !printOptions ) {
-
-            var bChangedFrozen = _this.lasteForzenPlaseNum !== _this.drawingArea.frozenPlaces.length;
-            if ( _this.controller.selectedObjects.length || _this.drawingArea.frozenPlaces.length > 1 || bChangedFrozen || window['Asc']['editor'].watermarkDraw) {
-                _this.OnUpdateOverlay();
-                _this.controller.updateSelectionState(true);
-            }
+        var bChangedFrozen = _this.lasteForzenPlaseNum !== _this.drawingArea.frozenPlaces.length;
+        if ( _this.controller.selectedObjects.length || _this.drawingArea.frozenPlaces.length > 1 || bChangedFrozen || window['Asc']['editor'].watermarkDraw) {
+            _this.OnUpdateOverlay();
+            _this.controller.updateSelectionState(true);
         }
         _this.lasteForzenPlaseNum = _this.drawingArea.frozenPlaces.length;
+    };
+
+    _this.print = function(oOptions) {
+        for(var nObject = 0; nObject < aObjects.length; ++nObject) {
+            var oDrawing = aObjects[nObject];
+            oDrawing.draw(oOptions.ctx.DocumentRenderer);
+        }
     };
 
     _this.getDrawingDocument = function()
@@ -2876,7 +2945,7 @@ function DrawingObjects() {
                     oNewChartSpace.checkDrawingBaseCoords();
                     oNewChartSpace.recalculate();
                     worksheet._scrollToRange(_this.getSelectedDrawingsRange());
-                    _this.showDrawingObjects(false);
+                    _this.showDrawingObjects(true);
                     _this.controller.resetSelection();
                     _this.controller.selectObject(oNewChartSpace, 0);
                     _this.controller.updateSelectionState();
@@ -3124,7 +3193,7 @@ function DrawingObjects() {
 
     _this.updateDrawingObject = function(bInsert, operType, updateRange) {
 
-        if(!History.Is_On())
+        if(!History.CanAddChanges() || History.CanNotAddChanges)
             return;
 
         var metrics = null;
@@ -3457,144 +3526,108 @@ function DrawingObjects() {
         bNeedRedraw && _this.showDrawingObjects(true);
     };
 
+    _this.updateDrawingsTransform = function(target) {
+        if(false === _this.bUpdateMetrics) {
+            return;
+        }
+        if(!AscCommon.isRealObject(target)) {
+            return;
+        }
+        if (target.target === AscCommonExcel.c_oTargetType.RowResize || 
+            target.target === AscCommonExcel.c_oTargetType.ColumnResize) {
+            for(var i = 0; i < aObjects.length; ++i) {
+                var oDrawingBase = aObjects[i];
+                var oGraphicObject = oDrawingBase.graphicObject;
+                if(oDrawingBase.checkTarget(target, false)) {
+                    oGraphicObject.handleUpdateExtents();
+                    oGraphicObject.recalculate();
+                }
+            }
+        }
+    };
 
-    _this.updateSizeDrawingObjects = function(target, bNoChangeCoords) {
-
+    _this.updateSizeDrawingObjects = function(target) {
         var oGraphicObject;
         var bCheck, bRecalculate;
-        var bHistoryIsOn = History.Is_On();
-        var aObjectsForCheck = [];
-        if(!bHistoryIsOn || true === bNoChangeCoords){
-            if (target.target === AscCommonExcel.c_oTargetType.RowResize || target.target === AscCommonExcel.c_oTargetType.ColumnResize) {
-                for (i = 0; i < aObjects.length; i++) {
-                    drawingObject = aObjects[i];
-                    bCheck = false;
-                    if(target.target === AscCommonExcel.c_oTargetType.RowResize){
-                        if(drawingObject.from.row >= target.row){
-                            bCheck = true;
-                        }
-                    }
-                    else{
-                        if(drawingObject.from.col >= target.col){
-                            bCheck = true;
-                        }
-                    }
-
-                    if (bCheck) {
-                        oGraphicObject = drawingObject.graphicObject;
-                        bRecalculate = true;
-                        if(oGraphicObject){
-                            if(bHistoryIsOn && drawingObject.Type === AscCommon.c_oAscCellAnchorType.cellanchorTwoCell
-                            && drawingObject.editAs !== AscCommon.c_oAscCellAnchorType.cellanchorTwoCell) {
-                                if(drawingObject.editAs === AscCommon.c_oAscCellAnchorType.cellanchorAbsolute) {
-                                    aObjectsForCheck.push({object: drawingObject, coords:  drawingObject._getGraphicObjectCoords()});
-                                }
-                                else {
-                                        var oldExtX = oGraphicObject.extX;
-                                        var oldExtY = oGraphicObject.extY;
-                                        oGraphicObject.recalculateTransform();
-                                        oGraphicObject.extX = oldExtX;
-                                        oGraphicObject.extY = oldExtY;
-                                        aObjectsForCheck.push({object: drawingObject, coords:  drawingObject._getGraphicObjectCoords()});
-                                }
+        if(!History.CanAddChanges() || History.CanNotAddChanges) {
+            _this.updateDrawingsTransform(target);
+            return;
+        }
+        var aObjectsForCheck = [], i, drawingObject, bDraw = false;
+        if (target.target === AscCommonExcel.c_oTargetType.RowResize ||
+            target.target === AscCommonExcel.c_oTargetType.ColumnResize) {
+            for (i = 0; i < aObjects.length; i++) {
+                drawingObject = aObjects[i];
+                bCheck = drawingObject.checkTarget(target, false);
+                if (bCheck) {
+                    oGraphicObject = drawingObject.graphicObject;
+                    bRecalculate = true;
+                    if(oGraphicObject){
+                        if(drawingObject.Type === AscCommon.c_oAscCellAnchorType.cellanchorTwoCell
+                        && drawingObject.editAs !== AscCommon.c_oAscCellAnchorType.cellanchorTwoCell) {
+                            if(drawingObject.editAs === AscCommon.c_oAscCellAnchorType.cellanchorAbsolute) {
+                                aObjectsForCheck.push({object: drawingObject, coords:  drawingObject._getGraphicObjectCoords()});
                             }
                             else {
-                                if(oGraphicObject.recalculateTransform) {
-                                    var oldX = oGraphicObject.x;
-                                    var oldY = oGraphicObject.y;
                                     var oldExtX = oGraphicObject.extX;
                                     var oldExtY = oGraphicObject.extY;
                                     oGraphicObject.recalculateTransform();
-                                    var fDelta = 0.01;
-                                    bRecalculate = false;
-                                    if(!AscFormat.fApproxEqual(oldX, oGraphicObject.x, fDelta) || !AscFormat.fApproxEqual(oldY, oGraphicObject.y, fDelta)
-                                        || !AscFormat.fApproxEqual(oldExtX, oGraphicObject.extX, fDelta) || !AscFormat.fApproxEqual(oldExtY, oGraphicObject.extY, fDelta)){
-                                        bRecalculate = true;
-                                    }
+                                    oGraphicObject.extX = oldExtX;
+                                    oGraphicObject.extY = oldExtY;
+                                    aObjectsForCheck.push({object: drawingObject, coords:  drawingObject._getGraphicObjectCoords()});
+                            }
+                        }
+                        else {
+                            if(oGraphicObject.recalculateTransform) {
+                                var oldX = oGraphicObject.x;
+                                var oldY = oGraphicObject.y;
+                                var oldExtX = oGraphicObject.extX;
+                                var oldExtY = oGraphicObject.extY;
+                                oGraphicObject.recalculateTransform();
+                                var fDelta = 0.01;
+                                bRecalculate = false;
+                                if(!AscFormat.fApproxEqual(oldX, oGraphicObject.x, fDelta) || !AscFormat.fApproxEqual(oldY, oGraphicObject.y, fDelta)
+                                    || !AscFormat.fApproxEqual(oldExtX, oGraphicObject.extX, fDelta) || !AscFormat.fApproxEqual(oldExtY, oGraphicObject.extY, fDelta)){
+                                    bRecalculate = true;
                                 }
-                                if(bRecalculate){
-                                    oGraphicObject.handleUpdateExtents();
-                                    oGraphicObject.recalculate();
-                                }
+                            }
+                            if(bRecalculate){
+                                oGraphicObject.handleUpdateExtents();
+                                oGraphicObject.recalculate();
+                                bDraw = true;
                             }
                         }
                     }
                 }
             }
-            if(aObjectsForCheck.length > 0) {
-                _this.objectLocker.reset();
+        }
+        if(aObjectsForCheck.length > 0) {
+            _this.objectLocker.reset();
+            for(i = 0; i < aObjectsForCheck.length; ++i) {
+                _this.objectLocker.addObjectId(aObjectsForCheck[i].object.graphicObject.Get_Id());
+            }
+            _this.objectLocker.checkObjects(function (bLock) {
+                var i, oObjectToCheck, oGraphicObject;
+                var bUpdateDrawingBaseCoords = (bLock === true) && History.CanAddChanges() && !History.CanNotAddChanges;
                 for(i = 0; i < aObjectsForCheck.length; ++i) {
-                    _this.objectLocker.addObjectId(aObjectsForCheck[i].object.graphicObject.Get_Id());
+                    oObjectToCheck = aObjectsForCheck[i];
+                    oGraphicObject = oObjectToCheck.object.graphicObject;
+                    if(bUpdateDrawingBaseCoords) {
+                        var oC = oObjectToCheck.coords;
+                        oGraphicObject.setDrawingBaseCoords(oC.from.col, oC.from.colOff, oC.from.row, oC.from.rowOff,
+                            oC.to.col, oC.to.colOff, oC.to.row, oC.to.rowOff,
+                            oC.Pos.X, oC.Pos.Y, oC.ext.cx, oC.ext.cy);
+                    }
+                    oGraphicObject.handleUpdateExtents();
+                    oGraphicObject.recalculate();
                 }
-                _this.objectLocker.checkObjects(function (bLock) {
-                    var i;
-                    if (bLock !== true) {
-                        for(i = 0; i < aObjectsForCheck.length; ++i) {
-                            aObjectsForCheck[i].object.handleUpdateExtents();
-                        }
-                    }
-                    else {
-                        for(i = 0; i < aObjectsForCheck.length; ++i) {
-                            var oC = aObjectsForCheck[i].coords;
-                            aObjectsForCheck[i].object.graphicObject.setDrawingBaseCoords(oC.from.col, oC.from.colOff, oC.from.row, oC.from.rowOff,
-                                oC.to.col, oC.to.colOff, oC.to.row, oC.to.rowOff,
-                                oC.Pos.X, oC.Pos.Y, oC.ext.cx, oC.ext.cy);
-                        }
-                    }
-                    _this.controller.startRecalculate();
-                });
-            }
-            return;
+                _this.showDrawingObjects(true);
+            });
         }
-
-        var i, bNeedRecalc = false, drawingObject, coords;
-        if (target.target === AscCommonExcel.c_oTargetType.RowResize) {
-            for (i = 0; i < aObjects.length; i++) {
-                drawingObject = aObjects[i];
-
-                if (drawingObject.from.row >= target.row) {
-                    coords = _this.calculateCoords(drawingObject.from);
-                    AscFormat.CheckSpPrXfrm(drawingObject.graphicObject);
-
-                    var rot = AscFormat.isRealNumber(drawingObject.graphicObject.spPr.xfrm.rot) ? drawingObject.graphicObject.spPr.xfrm.rot : 0;
-                    rot = AscFormat.normalizeRotate(rot);
-                    if (AscFormat.checkNormalRotate(rot)) {
-                        drawingObject.graphicObject.spPr.xfrm.setOffX(pxToMm(coords.x));
-                        drawingObject.graphicObject.spPr.xfrm.setOffY(pxToMm(coords.y));
-                    } else {
-                        drawingObject.graphicObject.spPr.xfrm.setOffX(pxToMm(coords.x) - drawingObject.graphicObject.spPr.xfrm.extX / 2 + drawingObject.graphicObject.spPr.xfrm.extY / 2);
-                        drawingObject.graphicObject.spPr.xfrm.setOffY(pxToMm(coords.y) - drawingObject.graphicObject.spPr.xfrm.extY / 2 + drawingObject.graphicObject.spPr.xfrm.extX / 2);
-                    }
-                    drawingObject.graphicObject.checkDrawingBaseCoords();
-                    bNeedRecalc = true;
-                }
+        else {
+            if(bDraw) {
+                _this.showDrawingObjects(true);
             }
-        } else {
-            for (i = 0; i < aObjects.length; i++) {
-                drawingObject = aObjects[i];
-
-                if (drawingObject.from.col >= target.col) {
-                    coords = _this.calculateCoords(drawingObject.from);
-                    AscFormat.CheckSpPrXfrm(drawingObject.graphicObject);
-
-                    var rot = AscFormat.isRealNumber(drawingObject.graphicObject.spPr.xfrm.rot) ? drawingObject.graphicObject.spPr.xfrm.rot : 0;
-                    rot = AscFormat.normalizeRotate(rot);
-                    if (AscFormat.checkNormalRotate(rot)) {
-                        drawingObject.graphicObject.spPr.xfrm.setOffX(pxToMm(coords.x));
-                        drawingObject.graphicObject.spPr.xfrm.setOffY(pxToMm(coords.y));
-                    } else {
-                        drawingObject.graphicObject.spPr.xfrm.setOffX(pxToMm(coords.x) - drawingObject.graphicObject.spPr.xfrm.extX / 2 + drawingObject.graphicObject.spPr.xfrm.extY / 2);
-                        drawingObject.graphicObject.spPr.xfrm.setOffY(pxToMm(coords.y) - drawingObject.graphicObject.spPr.xfrm.extY / 2 + drawingObject.graphicObject.spPr.xfrm.extX / 2);
-                    }
-
-                    drawingObject.graphicObject.checkDrawingBaseCoords();
-                    bNeedRecalc = true;
-                }
-            }
-        }
-        if (bNeedRecalc) {
-            _this.controller.recalculate2();
-            _this.showDrawingObjects(true);
         }
     };
 
@@ -4567,6 +4600,7 @@ function DrawingObjects() {
 
         History.Create_NewPoint(AscDFH.historydescription_Document_CompositeInput);
         _this.beginCompositeInput();
+        _this.controller.recalculateCurPos(true, true);
     };
 
 
@@ -4597,15 +4631,13 @@ function DrawingObjects() {
     };
     _this.Add_CompositeText = function(nCharCode)
     {
-
         if (null === _this.CompositeInput)
             return;
         History.Create_NewPoint(AscDFH.historydescription_Document_CompositeInputReplace);
         _this.addCompositeText(nCharCode);
-
         _this.checkCurrentTextObjectExtends();
         _this.controller.recalculate();
-        _this.controller.recalculateCurPos();
+        _this.controller.recalculateCurPos(true, true);
         _this.controller.updateSelectionState();
     };
 
@@ -4625,6 +4657,7 @@ function DrawingObjects() {
         _this.removeCompositeText(nCount);
         _this.checkCurrentTextObjectExtends();
         _this.controller.recalculate();
+        _this.controller.recalculateCurPos(true, true);
         _this.controller.updateSelectionState();
     };
     _this.Replace_CompositeText = function(arrCharCodes)
@@ -4639,6 +4672,7 @@ function DrawingObjects() {
         }
         _this.checkCurrentTextObjectExtends();
 		_this.controller.startRecalculate();
+        _this.controller.recalculateCurPos(true, true);
         _this.controller.updateSelectionState();
     };
     _this.Set_CursorPosInCompositeText = function(nPos)
@@ -4649,6 +4683,7 @@ function DrawingObjects() {
 
         var nInRunPos = Math.max(Math.min(_this.CompositeInput.Pos + nPos, _this.CompositeInput.Pos + _this.CompositeInput.Length, oRun.Content.length), _this.CompositeInput.Pos);
         oRun.State.ContentPos = nInRunPos;
+        _this.controller.recalculateCurPos(true, true);
         _this.controller.updateSelectionState();
     };
     _this.Get_CursorPosInCompositeText = function()
@@ -4678,6 +4713,8 @@ function DrawingObjects() {
                 oTargetTextObject.recalculateContent();
             }
         }
+        
+        _this.controller.recalculateCurPos(true, true);
         _this.sendGraphicObjectProps();
         _this.showDrawingObjects(true);
     };
